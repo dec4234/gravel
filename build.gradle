@@ -20,6 +20,17 @@ loom {
 			sourceSet sourceSets.client
 		}
 	}
+
+	runs {
+		client {
+			// Used by the Gravel MCP server: `gradlew runClient -PquickPlayWorld=<world name>`
+			// opens that singleplayer world directly after the game starts.
+			def quickPlayWorld = providers.gradleProperty("quickPlayWorld")
+			if (quickPlayWorld.isPresent() && !quickPlayWorld.get().isBlank()) {
+				programArgs("--quickPlaySingleplayer", quickPlayWorld.get())
+			}
+		}
+	}
 }
 
 dependencies {

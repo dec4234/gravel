@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "gravel": {
+      "command": "java",
+      "args": ["-jar", "mcp-server/build/libs/gravel-mcp.jar"]
+    }
+  }
+}
