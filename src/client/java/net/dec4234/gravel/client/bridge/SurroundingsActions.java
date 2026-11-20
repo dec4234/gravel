@@ -132,7 +132,7 @@ public final class SurroundingsActions {
 	}
 
 	/** The block or entity under the crosshair, like the F3 "Targeted Block" line. */
-	private static JsonObject lookTarget(Minecraft mc, LocalPlayer player) {
+	static JsonObject lookTarget(Minecraft mc, LocalPlayer player) {
 		HitResult hit = mc.hitResult;
 		JsonObject o = new JsonObject();
 		if (hit == null || hit.getType() == HitResult.Type.MISS) {

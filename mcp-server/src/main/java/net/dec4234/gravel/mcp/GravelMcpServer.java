@@ -547,6 +547,57 @@ public final class GravelMcpServer {
 				args -> PRETTY.toJson(bridge.action("interact_widget",
 						copy(args, "widget", "label", "action", "value", "fraction", "amount")))));
 
+		add(new Tool("look",
+				"Turn the player's view at once. Three ways: yaw and/or pitch in degrees (with relative: true they "
+						+ "are added to the current view), a point x, y, z (for the center of block 10 64 -3 pass "
+						+ "10.5 64.5 -3.5), or an entity id from list_entities. Yaw: 0 south (+Z), 90 west (-X), 180 "
+						+ "north (-Z), -90 east (+X). Pitch: -90 up, 0 level, 90 down. Works in singleplayer and "
+						+ "multiplayer. Returns the old and new view, the facing direction, and the block or entity "
+						+ "under the crosshair.",
+				Schema.object()
+						.prop("yaw", "number", "Horizontal angle in degrees.")
+						.prop("pitch", "number", "Vertical angle in degrees, -90 (up) to 90 (down).")
+						.prop("relative", "boolean", "Add yaw and pitch to the current view. Default false.")
+						.prop("x", "number", "X of the point to look at.")
+						.prop("y", "number", "Y of the point to look at.")
+						.prop("z", "number", "Z of the point to look at.")
+						.prop("entity", "integer", "Id of the entity to look at (from list_entities).")
+						.build(),
+				args -> PRETTY.toJson(bridge.action("look", copy(args, "yaw", "pitch", "relative", "x", "y", "z", "entity")))));
+
+		add(new Tool("move",
+				"Walk the player by holding the real movement keys, relative to the view direction (use look first "
+						+ "to aim). Stops after duration_ms, or when the player has moved distance blocks "
+						+ "horizontally, whichever comes first. sprint holds the sprint key (needs forward, and enough "
+						+ "food), sneak holds sneak, jump holds jump (jumps again on each landing, swims up in water). "
+						+ "No screen can be open. Returns the position before and after, the distance, if the player "
+						+ "sprinted, and blocked (true if a wall stopped the player).",
+				Schema.object()
+						.prop("direction", "string", "forward (default), back, left, right, a mix such as "
+								+ "forward+left, or none (stay in place, for sneak or jump only).")
+						.prop("duration_ms", "integer", "How long to hold the keys, 0-20000 ms. Default 1000, or "
+								+ "20000 when distance is given.")
+						.prop("distance", "number", "Stop after this many blocks of horizontal movement. Optional.")
+						.prop("sprint", "boolean", "Sprint. Default false.")
+						.prop("sneak", "boolean", "Sneak (crouch). Default false.")
+						.prop("jump", "boolean", "Hold jump while moving. Default false.")
+						.build(),
+				args -> PRETTY.toJson(bridge.action("move",
+						copy(args, "direction", "duration_ms", "distance", "sprint", "sneak", "jump")))));
+
+		add(new Tool("jump",
+				"Make the player jump once with the real jump key, and wait for the landing. Without hold_ms the key "
+						+ "is held until the player leaves the ground. With hold_ms the key stays down that long (to "
+						+ "swim up, climb a ladder up, or fly up in creative). No screen can be open. To jump while "
+						+ "walking, use move with jump: true. Returns the position before and after, the highest Y "
+						+ "(peakY), rise, and if the player left the ground and landed.",
+				Schema.object()
+						.prop("hold_ms", "integer", "How long to hold the jump key, 0-20000 ms. Optional.")
+						.prop("wait_ms", "integer", "After the release, the longest wait for the landing, 0-20000 "
+								+ "ms. Default 1500.")
+						.build(),
+				args -> PRETTY.toJson(bridge.action("jump", copy(args, "hold_ms", "wait_ms")))));
+
 		add(new Tool("minecraft_launch_log",
 				"Show the last lines of the Gradle/Minecraft launch log. Use this to debug a failed launch.",
 				Schema.object()

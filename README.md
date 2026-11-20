@@ -2,9 +2,7 @@
 
 Claude code MCP for Minecraft 26.3 as a Fabric mod.
 
-## Setup
-
-For setup instructions, please see the [Fabric Documentation page](https://docs.fabricmc.net/develop/getting-started/creating-a-project#setting-up) related to the IDE that you are using.
+This MCP is intended for rapid local development and should not be used on public servers.
 
 ## Claude Code MCP
 
@@ -46,6 +44,9 @@ Tools:
 | `enter_text` | Types into a text box of the open screen (world name, server address, search, anvil, sign, book). Without `text` it lists the text boxes. `field` picks a box, `mode: set` replaces the value, `clear` and `submit` (press enter) |
 | `read_screen` | Reads the open menu as data: title and every widget (buttons, sliders, cycle buttons, check boxes, text boxes, tabs, lists and entries, labels) with index, label, value, state and position. `interactive_only`, `include_hidden` |
 | `interact_widget` | Uses a widget by `widget` index or `label`: `click`, `double_click`, `right_click`, `set` (text, check box, cycle button value, slider `value` or `fraction`), `scroll` (`amount`), `focus`. Lists scroll to the widget. Returns the new screen if one opens |
+| `look` | Turns the view: `yaw`/`pitch` (with `relative: true` they add to the view), a point `x`,`y`,`z`, or an `entity` id. Returns the crosshair target |
+| `move` | Walks with the real movement keys: `direction` (`forward`, `back`, `left`, `right`, `forward+left`, `none`), `duration_ms` and/or `distance`, `sprint`, `sneak`, `jump`. Returns positions, distance and `blocked` |
+| `jump` | Jumps once and waits for the landing. `hold_ms` holds the key (swim up, climb, fly up) |
 | `minecraft_launch_log` | Last lines of the launch log |
 | `list_minecraft_logs` | Lists the client logs (`latest.log`, `debug.log`, old `.log.gz` files), crash reports and the launch log |
 | `scan_minecraft_log` | Searches a log by text or regex, level, thread, logger and time, with context and stack traces. `since_line` gets only new entries. `summary: true` counts levels and groups the warnings, errors and exceptions. Works when the game is stopped or crashed |
