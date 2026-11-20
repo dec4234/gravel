@@ -20,6 +20,7 @@ import java.nio.file.Path;
 import java.time.Duration;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.Objects;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -177,6 +178,120 @@ public final class GravelMcpServer {
 					params.addProperty("limit", Schema.optInt(args, "limit", 50));
 					params.addProperty("include_action_bar", Schema.optBool(args, "include_action_bar", false));
 					return PRETTY.toJson(bridge.action("read_chat", params));
+				}));
+
+		add(new Tool("select_hotbar_slot",
+				"Select a hotbar slot, like pressing a number key. Slot 0 is key 1, slot 8 is key 9. "
+						+ "Returns the item now in the hand.",
+				Schema.object()
+						.requiredProp("slot", "integer", "Hotbar slot 0-8.")
+						.build(),
+				args -> {
+					JsonObject params = new JsonObject();
+					params.addProperty("slot", Schema.optInt(args, "slot", -1));
+					return PRETTY.toJson(bridge.action("select_hotbar_slot", params));
+				}));
+
+		add(new Tool("open_inventory",
+				"Open the player inventory, like pressing E. In creative mode this opens the creative inventory "
+						+ "on its Survival Inventory tab, so slot numbers are the same as in survival.",
+				Schema.object().build(),
+				args -> PRETTY.toJson(bridge.action("open_inventory", new JsonObject()))));
+
+		add(new Tool("read_inventory",
+				"List the items in the open container screen (inventory, chest, ...), or in the player inventory if "
+						+ "no container is open. Also shows the item on the cursor. Player inventory slot numbers: "
+						+ "0 crafting result, 1-4 crafting grid, 5-8 armor (head to feet), 9-35 main inventory, "
+						+ "36-44 hotbar, 45 offhand. Other containers list their own slots first, then the player's.",
+				Schema.object()
+						.prop("include_empty", "boolean", "Also list empty slots. Default false.")
+						.build(),
+				args -> {
+					JsonObject params = new JsonObject();
+					params.addProperty("include_empty", Schema.optBool(args, "include_empty", false));
+					return PRETTY.toJson(bridge.action("read_inventory", params));
+				}));
+
+		add(new Tool("move_item",
+				"Move items from one slot to another in the open container screen, with mouse clicks like a player. "
+						+ "If the target slot holds a different item, the two stacks swap. Use read_inventory for slot numbers.",
+				Schema.object()
+						.requiredProp("from", "integer", "Slot to take items from.")
+						.requiredProp("to", "integer", "Slot to put items in.")
+						.prop("count", "integer", "How many items to move. Default: the whole stack.")
+						.build(),
+				args -> {
+					JsonObject params = new JsonObject();
+					params.addProperty("from", Schema.optInt(args, "from", -1));
+					params.addProperty("to", Schema.optInt(args, "to", -1));
+					if (args.has("count") && !args.get("count").isJsonNull()) {
+						params.addProperty("count", Schema.optInt(args, "count", 1));
+					}
+					return PRETTY.toJson(bridge.action("move_item", params));
+				}));
+
+		add(new Tool("click_slot",
+				"Click one slot in the open container screen, for full control. Actions: PICKUP (button 0 left, 1 right), "
+						+ "QUICK_MOVE (shift-click), SWAP (button = hotbar slot 0-8, or 40 for offhand), THROW (button 0 one "
+						+ "item, 1 the stack), CLONE (creative middle click), PICKUP_ALL (double click). Slot -999 clicks "
+						+ "outside the window, which drops the item on the cursor.",
+				Schema.object()
+						.requiredProp("slot", "integer", "Slot number, or -999 for outside the window.")
+						.prop("action", "string", "PICKUP, QUICK_MOVE, SWAP, CLONE, THROW, QUICK_CRAFT or PICKUP_ALL. Default PICKUP.")
+						.prop("button", "integer", "Mouse button or hotbar slot, see the description. Default 0.")
+						.build(),
+				args -> {
+					JsonObject params = new JsonObject();
+					params.addProperty("slot", Schema.optInt(args, "slot", 0));
+					params.addProperty("action", Objects.requireNonNullElse(Schema.optString(args, "action"), "PICKUP"));
+					params.addProperty("button", Schema.optInt(args, "button", 0));
+					return PRETTY.toJson(bridge.action("click_slot", params));
+				}));
+
+		add(new Tool("open_pause_menu",
+				"Open the pause menu (game menu), like pressing ESC in game. In singleplayer this pauses the game.",
+				Schema.object().build(),
+				args -> PRETTY.toJson(bridge.action("open_pause_menu", new JsonObject()))));
+
+		add(new Tool("open_options",
+				"Open the Options menu. Closing it goes back to the screen that was open, or to the pause menu.",
+				Schema.object().build(),
+				args -> PRETTY.toJson(bridge.action("open_options", new JsonObject()))));
+
+		add(new Tool("close_screen",
+				"Close the open screen, like pressing ESC. Some screens (such as Options) go back to their parent screen.",
+				Schema.object().build(),
+				args -> PRETTY.toJson(bridge.action("close_screen", new JsonObject()))));
+
+		add(new Tool("list_options",
+				"List game options with their values, by the names used in options.txt (for example fov, renderDistance, "
+						+ "guiScale, soundCategory_master, key_key.jump, mainHand). Values are the real values the menus "
+						+ "show (fov 70, mainHand RIGHT). Use filter to find options.",
+				Schema.object()
+						.prop("filter", "string", "Only names that contain this text (not case sensitive). Optional.")
+						.build(),
+				args -> {
+					JsonObject params = new JsonObject();
+					String filter = Schema.optString(args, "filter");
+					if (filter != null) {
+						params.addProperty("filter", filter);
+					}
+					return PRETTY.toJson(bridge.action("list_options", params));
+				}));
+
+		add(new Tool("set_option",
+				"Change one game option and save it, like changing it in the Options menu. Use the name and value format "
+						+ "from list_options. Examples: fov 90, renderDistance 8, guiScale 2, soundCategory_master 0.5, "
+						+ "mainHand left, key_key.jump key.keyboard.space. A value the game does not allow gives an error.",
+				Schema.object()
+						.requiredProp("name", "string", "Option name from list_options.")
+						.requiredProp("value", "string", "New value, in the same format list_options shows.")
+						.build(),
+				args -> {
+					JsonObject params = new JsonObject();
+					params.addProperty("name", Schema.optString(args, "name"));
+					params.addProperty("value", Schema.optString(args, "value"));
+					return PRETTY.toJson(bridge.action("set_option", params));
 				}));
 
 		add(new Tool("minecraft_launch_log",

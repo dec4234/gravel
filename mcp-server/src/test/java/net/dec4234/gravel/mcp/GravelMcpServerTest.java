@@ -148,7 +148,9 @@ class GravelMcpServerTest {
 			assertEquals("object", o.getAsJsonObject("inputSchema").get("type").getAsString());
 		});
 		assertEquals(List.of("launch_minecraft", "stop_minecraft", "minecraft_status", "join_world",
-				"open_chat", "send_chat", "read_chat", "minecraft_launch_log"), names);
+				"open_chat", "send_chat", "read_chat", "select_hotbar_slot", "open_inventory", "read_inventory",
+				"move_item", "click_slot", "open_pause_menu", "open_options", "close_screen", "list_options",
+				"set_option", "minecraft_launch_log"), names);
 	}
 
 	@Test
@@ -330,6 +332,61 @@ class GravelMcpServerTest {
 			JsonObject reply = sink.next();
 			assertTrue(toolIsError(reply));
 			assertTrue(toolText(reply).contains("disk full"));
+		}
+	}
+
+	@Test
+	void moveItemSendsCountOnlyWhenGiven() throws Exception {
+		try (FakeBridge fake = new FakeBridge()) {
+			fake.on("move_item", params -> FakeBridge.Reply.ok(new JsonObject()));
+			GravelMcpServer server = server(fake.port());
+
+			JsonObject args = new JsonObject();
+			args.addProperty("from", 36);
+			args.addProperty("to", 9);
+			server.handle(toolCall(1, "move_item", args));
+			assertFalse(toolIsError(sink.next()));
+			JsonObject sent = fake.calls.get(0).params();
+			assertEquals(36, sent.get("from").getAsInt());
+			assertEquals(9, sent.get("to").getAsInt());
+			assertFalse(sent.has("count"));
+
+			args.addProperty("count", 5);
+			server.handle(toolCall(2, "move_item", args));
+			sink.next();
+			assertEquals(5, fake.calls.get(1).params().get("count").getAsInt());
+		}
+	}
+
+	@Test
+	void clickSlotPassesDefaults() throws Exception {
+		try (FakeBridge fake = new FakeBridge()) {
+			fake.on("click_slot", params -> FakeBridge.Reply.ok(new JsonObject()));
+			JsonObject args = new JsonObject();
+			args.addProperty("slot", 40);
+			server(fake.port()).handle(toolCall(1, "click_slot", args));
+			assertFalse(toolIsError(sink.next()));
+
+			JsonObject sent = fake.calls.getFirst().params();
+			assertEquals(40, sent.get("slot").getAsInt());
+			assertEquals("PICKUP", sent.get("action").getAsString());
+			assertEquals(0, sent.get("button").getAsInt());
+		}
+	}
+
+	@Test
+	void setOptionPassesValueAsText() throws Exception {
+		try (FakeBridge fake = new FakeBridge()) {
+			fake.on("set_option", params -> FakeBridge.Reply.ok(new JsonObject()));
+			JsonObject args = new JsonObject();
+			args.addProperty("name", "fov");
+			args.addProperty("value", 90);
+			server(fake.port()).handle(toolCall(1, "set_option", args));
+			assertFalse(toolIsError(sink.next()));
+
+			JsonObject sent = fake.calls.getFirst().params();
+			assertEquals("fov", sent.get("name").getAsString());
+			assertEquals("90", sent.get("value").getAsString());
 		}
 	}
 

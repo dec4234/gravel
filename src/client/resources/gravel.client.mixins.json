@@ -3,7 +3,9 @@
 	"package": "net.dec4234.gravel.client.mixin",
 	"compatibilityLevel": "JAVA_25",
 	"client": [
+		"AbstractContainerScreenInvoker",
 		"CreateWorldScreenInvoker",
+		"CreativeModeInventoryScreenInvoker",
 		"ExampleClientMixin"
 	],
 	"injectors": {

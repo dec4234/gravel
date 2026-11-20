@@ -25,6 +25,7 @@ public final class BuiltinActions {
 		o.addProperty("world", WorldActions.currentWorld(mc));
 		o.addProperty("worldError", WorldActions.lastError());
 		o.addProperty("latestChatId", ChatLog.latestId());
+		o.addProperty("paused", mc.isPaused());
 		if (inWorld) {
 			JsonObject p = new JsonObject();
 			p.addProperty("name", player.getName().getString());
@@ -34,6 +35,8 @@ public final class BuiltinActions {
 			p.addProperty("yaw", player.getYRot());
 			p.addProperty("pitch", player.getXRot());
 			p.addProperty("health", player.getHealth());
+			p.addProperty("selectedHotbarSlot", player.getInventory().getSelectedSlot());
+			p.add("heldItem", InventoryActions.stackJson(player.getInventory().getSelectedItem()));
 			o.add("player", p);
 		}
 		return o;

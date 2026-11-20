@@ -42,6 +42,10 @@ public class BridgeClientGameTest implements FabricClientGameTest {
 		sendCommandAndReadFeedback(context);
 		sendChatMessage(context);
 		openChatScreen(context);
+		selectHotbarSlot(context);
+		moveItemsInInventory(context);
+		pauseAndOptionsMenus(context);
+		changeOptions(context);
 		recreateWorld(context);
 		leaveWorld(context);
 	}
@@ -53,7 +57,9 @@ public class BridgeClientGameTest implements FabricClientGameTest {
 		check(health.get("ok").getAsBoolean(), "health is ok");
 
 		JsonArray actions = get(context, "/actions").getAsJsonArray("actions");
-		for (String name : new String[]{"status", "shutdown", "join_world", "open_chat", "send_chat", "read_chat"}) {
+		for (String name : new String[]{"status", "shutdown", "join_world", "open_chat", "send_chat", "read_chat",
+				"select_hotbar_slot", "open_inventory", "read_inventory", "click_slot", "move_item", "open_pause_menu",
+				"open_options", "close_screen", "list_options", "set_option"}) {
 			check(actions.contains(new com.google.gson.JsonPrimitive(name)), "action list has " + name);
 		}
 	}
@@ -131,6 +137,126 @@ public class BridgeClientGameTest implements FabricClientGameTest {
 		action(context, "open_chat", params);
 		context.waitForScreen(ChatScreen.class);
 		context.setScreen(() -> null);
+	}
+
+	private void selectHotbarSlot(ClientGameTestContext context) {
+		JsonObject params = new JsonObject();
+		params.addProperty("slot", 3);
+		JsonObject result = action(context, "select_hotbar_slot", params);
+		checkEquals(3, result.get("selectedSlot").getAsInt(), "selected slot");
+		context.runOnClient(mc -> checkEquals(3, mc.player.getInventory().getSelectedSlot(), "player selected slot"));
+
+		params.addProperty("slot", 9);
+		checkEquals(500, post(context, "/action/select_hotbar_slot", params).status(), "slot 9 is not a hotbar slot");
+
+		params.addProperty("slot", 0);
+		action(context, "select_hotbar_slot", params);
+	}
+
+	private void moveItemsInInventory(ClientGameTestContext context) {
+		JsonObject clear = new JsonObject();
+		clear.addProperty("message", "/clear @s");
+		action(context, "send_chat", clear);
+		JsonObject give = new JsonObject();
+		give.addProperty("message", "/give @s minecraft:stone 10");
+		action(context, "send_chat", give);
+		context.waitFor(mc -> mc.player.getInventory().getItem(0).getCount() == 10, 200);
+
+		checkEquals(500, post(context, "/action/move_item", new JsonObject()).status(), "move_item needs an open inventory");
+
+		JsonObject opened = action(context, "open_inventory", new JsonObject());
+		check(string(opened, "screen") != null, "a screen opened: " + opened);
+
+		// Hotbar slot 0 is menu slot 36 in the player inventory menu.
+		checkEquals(10, slotCount(context, 36), "stone in hotbar before the move");
+
+		JsonObject move = new JsonObject();
+		move.addProperty("from", 36);
+		move.addProperty("to", 9);
+		move.addProperty("count", 4);
+		JsonObject moved = action(context, "move_item", move);
+		checkEquals(6, moved.getAsJsonObject("from").get("count").getAsInt(), "items left in from slot");
+		checkEquals(4, moved.getAsJsonObject("to").get("count").getAsInt(), "items in to slot");
+		checkEquals(0, moved.getAsJsonObject("carried").get("count").getAsInt(), "cursor empty after move");
+
+		// Move the whole stack, with a raw click pair.
+		JsonObject click = new JsonObject();
+		click.addProperty("slot", 36);
+		action(context, "click_slot", click);
+		click.addProperty("slot", 9);
+		JsonObject placed = action(context, "click_slot", click);
+		checkEquals(10, placed.getAsJsonObject("slotNow").get("count").getAsInt(), "stacks merged by clicks");
+		checkEquals(0, slotCount(context, 36), "hotbar slot empty");
+
+		context.waitFor(mc -> mc.player.getInventory().getItem(9).getCount() == 10, 100);
+
+		JsonObject closed = action(context, "close_screen", new JsonObject());
+		check(string(closed, "screen") == null, "inventory closed: " + closed);
+	}
+
+	private void pauseAndOptionsMenus(ClientGameTestContext context) {
+		JsonObject paused = action(context, "open_pause_menu", new JsonObject());
+		checkEquals("PauseScreen", string(paused, "screen"), "pause menu open");
+
+		JsonObject options = action(context, "open_options", new JsonObject());
+		checkEquals("OptionsScreen", string(options, "screen"), "options menu open");
+
+		JsonObject back = action(context, "close_screen", new JsonObject());
+		checkEquals("PauseScreen", string(back, "screen"), "options close back to the pause menu");
+
+		JsonObject resumed = action(context, "close_screen", new JsonObject());
+		check(string(resumed, "screen") == null, "pause menu closed: " + resumed);
+	}
+
+	private void changeOptions(ClientGameTestContext context) {
+		JsonObject filter = new JsonObject();
+		filter.addProperty("filter", "fov");
+		JsonObject listed = action(context, "list_options", filter).getAsJsonObject("options");
+		check(listed.has("fov"), "fov is listed: " + listed);
+		String oldFov = listed.get("fov").getAsString();
+
+		checkEquals("95", setOption(context, "fov", "95"), "fov after set");
+		context.runOnClient(mc -> checkEquals(95, mc.options.fov().get(), "fov in game"));
+		setOption(context, "fov", oldFov);
+
+		// An enum option, given as a bare word.
+		String oldHand = action(context, "list_options", new JsonObject()).getAsJsonObject("options").get("mainHand").getAsString();
+		checkEquals("LEFT", setOption(context, "mainHand", "left"), "main hand after set");
+		setOption(context, "mainHand", oldHand);
+
+		// A plain field and a key binding.
+		setOption(context, "pauseOnLostFocus", "false");
+		context.runOnClient(mc -> check(!mc.options.pauseOnLostFocus, "pauseOnLostFocus is off"));
+		setOption(context, "pauseOnLostFocus", "true");
+
+		checkEquals("key.keyboard.j", setOption(context, "key_key.jump", "key.keyboard.j"), "jump key after set");
+		setOption(context, "key_key.jump", "key.keyboard.space");
+
+		JsonObject bad = new JsonObject();
+		bad.addProperty("name", "fov");
+		bad.addProperty("value", "banana");
+		checkEquals(500, post(context, "/action/set_option", bad).status(), "bad value is refused");
+		bad.addProperty("value", "1000");
+		checkEquals(500, post(context, "/action/set_option", bad).status(), "out of range value is refused");
+		bad.addProperty("name", "no_such_option");
+		checkEquals(500, post(context, "/action/set_option", bad).status(), "unknown option is refused");
+	}
+
+	private String setOption(ClientGameTestContext context, String name, String value) {
+		JsonObject params = new JsonObject();
+		params.addProperty("name", name);
+		params.addProperty("value", value);
+		return action(context, "set_option", params).get("value").getAsString();
+	}
+
+	private int slotCount(ClientGameTestContext context, int slot) {
+		for (JsonElement e : action(context, "read_inventory", new JsonObject()).getAsJsonArray("slots")) {
+			JsonObject s = e.getAsJsonObject();
+			if (s.get("slot").getAsInt() == slot) {
+				return s.get("count").getAsInt();
+			}
+		}
+		return 0;
 	}
 
 	private void recreateWorld(ClientGameTestContext context) {
