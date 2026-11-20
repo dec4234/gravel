@@ -33,6 +33,27 @@ loom {
 	}
 }
 
+// Client game tests: src/gametest. Run with `gradlew runClientGameTest`.
+// This opens a real game window, joins a world and drives the mod through its HTTP bridge.
+fabricApi {
+	configureTests {
+		createSourceSet = true
+		modId = "gravel-gametest"
+		enableGameTests = false
+		enableClientGameTests = true
+		eula = true
+	}
+}
+
+loom {
+	runs {
+		clientGameTest {
+			// Do not clash with a dev client (runClient) that already uses the default bridge port.
+			property("gravel.bridge.port", "25598")
+		}
+	}
+}
+
 dependencies {
 	// To change the versions see the gradle.properties file
 	minecraft "com.mojang:minecraft:${project.minecraft_version}"
@@ -40,6 +61,25 @@ dependencies {
 
 	// Fabric API. This is technically optional, but you probably want it anyway.
 	implementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_api_version}"
+
+	// Unit tests. fabric-loader-junit runs tests inside a Fabric Loader environment,
+	// so Minecraft classes (and mixins) can load.
+	testImplementation "net.fabricmc:fabric-loader-junit:${project.loader_version}"
+	testImplementation platform('org.junit:junit-bom:5.13.4')
+	testImplementation 'org.junit.jupiter:junit-jupiter'
+	testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+}
+
+// Let the tests see the client source set (the bridge code lives there).
+sourceSets {
+	test {
+		compileClasspath += sourceSets.client.compileClasspath + sourceSets.client.output
+		runtimeClasspath += sourceSets.client.runtimeClasspath + sourceSets.client.output
+	}
+}
+
+test {
+	useJUnitPlatform()
 }
 
 processResources {

@@ -1,0 +1,18 @@
+{
+	"schemaVersion": 1,
+	"id": "gravel-gametest",
+	"version": "1.0.0",
+	"name": "Gravel Game Tests",
+	"description": "Client game tests for Gravel. Only loaded by runClientGameTest.",
+	"license": "MIT",
+	"environment": "client",
+	"entrypoints": {
+		"fabric-client-gametest": [
+			"net.dec4234.gravel.gametest.BridgeClientGameTest"
+		]
+	},
+	"depends": {
+		"gravel": "*",
+		"fabric-client-gametest-api-v1": "*"
+	}
+}

@@ -122,6 +122,11 @@ public final class BridgeServer {
 		}
 	}
 
+	/** The port the server listens on (useful when started on port 0). */
+	public int port() {
+		return server.getAddress().getPort();
+	}
+
 	public void stop() {
 		if (server != null) {
 			server.stop(0);

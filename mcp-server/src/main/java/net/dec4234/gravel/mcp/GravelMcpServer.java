@@ -52,7 +52,8 @@ public final class GravelMcpServer {
 		int port = Integer.parseInt(envOr("GRAVEL_BRIDGE_PORT", "25599"));
 		System.err.println("[gravel-mcp] project dir: " + projectDir + ", bridge port: " + port);
 
-		new GravelMcpServer(protocolOut, projectDir, port).serve();
+		new GravelMcpServer(protocolOut, projectDir, port)
+				.serve(new BufferedReader(new InputStreamReader(System.in, StandardCharsets.UTF_8)));
 	}
 
 	GravelMcpServer(PrintStream out, Path projectDir, int port) {
@@ -223,8 +224,7 @@ public final class GravelMcpServer {
 
 	// ---------------------------------------------------------------- JSON-RPC loop
 
-	private void serve() throws Exception {
-		BufferedReader in = new BufferedReader(new InputStreamReader(System.in, StandardCharsets.UTF_8));
+	void serve(BufferedReader in) throws Exception {
 		String line;
 		while ((line = in.readLine()) != null) {
 			if (line.isBlank()) {
@@ -243,7 +243,7 @@ public final class GravelMcpServer {
 		workers.shutdownNow();
 	}
 
-	private void handle(JsonObject msg) {
+	void handle(JsonObject msg) {
 		JsonElement id = msg.get("id");
 		String method = msg.has("method") ? msg.get("method").getAsString() : null;
 		JsonObject params = msg.has("params") && msg.get("params").isJsonObject()

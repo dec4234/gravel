@@ -32,11 +32,20 @@ public final class ChatLog {
 				add(overlay ? "actionbar" : "system", null, message));
 	}
 
-	private static synchronized void add(String type, String sender, Component message) {
-		ENTRIES.addLast(new Entry(nextId++, Instant.now(), type, sender, message.getString()));
+	private static void add(String type, String sender, Component message) {
+		add(type, sender, message.getString());
+	}
+
+	static synchronized void add(String type, String sender, String text) {
+		ENTRIES.addLast(new Entry(nextId++, Instant.now(), type, sender, text));
 		while (ENTRIES.size() > CAPACITY) {
 			ENTRIES.removeFirst();
 		}
+	}
+
+	/** Removes all lines. Ids keep counting up, so old ids are never used again. For tests. */
+	static synchronized void clear() {
+		ENTRIES.clear();
 	}
 
 	/** The id of the newest line, or 0 if there is none. */
