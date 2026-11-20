@@ -510,6 +510,43 @@ public final class GravelMcpServer {
 						.build(),
 				args -> PRETTY.toJson(bridge.action("enter_text", copy(args, "text", "field", "mode", "clear", "submit")))));
 
+		add(new Tool("read_screen",
+				"Read the open screen (menu) as data: its class, title, size, and every widget in it. Widget types: "
+						+ "button, cycle_button (value), checkbox (checked), slider (fraction 0-1, label shows the value), "
+						+ "text_box (value), tab (selected), list (entries, scroll), list_entry (selected), text (a "
+						+ "label), container. Each widget has its index (widget), label, parent, interactive, active, "
+						+ "visible, inView (not scrolled out), focused, position and size in GUI pixels, and tooltip. "
+						+ "Use the index or the label with interact_widget. Works for all menus: title screen, world "
+						+ "and server lists, create world, options, pause menu, and mod menus. For item slots use "
+						+ "read_inventory.",
+				Schema.object()
+						.prop("interactive_only", "boolean", "Only widgets that can be used now (no labels, containers or "
+								+ "greyed out widgets). Default false.")
+						.prop("include_hidden", "boolean", "Also list hidden widgets. Default false.")
+						.build(),
+				args -> PRETTY.toJson(bridge.action("read_screen", copy(args, "interactive_only", "include_hidden")))));
+
+		add(new Tool("interact_widget",
+				"Use a widget of the open screen, by its index from read_screen (widget) or its label text (label, "
+						+ "exact match first, then part of the label). Actions: click (default; a real left click "
+						+ "through the screen, so buttons press, tabs open, list entries are selected), double_click "
+						+ "(for example to open a world in the world list), right_click, set (text box: the text; "
+						+ "checkbox: true or false; cycle button: the value to show, clicked until it shows; slider: "
+						+ "value as the slider shows it, such as 90, 50% or 12, or fraction 0-1), scroll (amount wheel "
+						+ "steps over the widget or the screen center, positive goes down), focus. Lists scroll by "
+						+ "themselves to show the widget. If the action opens a new screen, the result has newScreen "
+						+ "with its widgets.",
+				Schema.object()
+						.prop("widget", "integer", "Widget index from read_screen.")
+						.prop("label", "string", "Text on the widget, instead of widget. Not case sensitive.")
+						.prop("action", "string", "click (default), double_click, right_click, set, scroll or focus.")
+						.prop("value", "string", "For set: the text, true/false, or the value to show.")
+						.prop("fraction", "number", "For set on a slider: position from 0 (left) to 1 (right).")
+						.prop("amount", "number", "For scroll: wheel steps. Positive goes down, negative up. Default 1.")
+						.build(),
+				args -> PRETTY.toJson(bridge.action("interact_widget",
+						copy(args, "widget", "label", "action", "value", "fraction", "amount")))));
+
 		add(new Tool("minecraft_launch_log",
 				"Show the last lines of the Gradle/Minecraft launch log. Use this to debug a failed launch.",
 				Schema.object()

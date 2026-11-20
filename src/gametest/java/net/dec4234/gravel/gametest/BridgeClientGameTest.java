@@ -45,6 +45,7 @@ public class BridgeClientGameTest implements FabricClientGameTest {
 		selectHotbarSlot(context);
 		moveItemsInInventory(context);
 		pauseAndOptionsMenus(context);
+		useMenuWidgets(context);
 		changeOptions(context);
 		seeSurroundings(context);
 		recreateWorld(context);
@@ -61,7 +62,7 @@ public class BridgeClientGameTest implements FabricClientGameTest {
 		for (String name : new String[]{"status", "shutdown", "join_world", "open_chat", "send_chat", "read_chat",
 				"select_hotbar_slot", "open_inventory", "read_inventory", "click_slot", "move_item", "open_pause_menu",
 				"open_options", "close_screen", "list_options", "set_option", "scan_blocks", "list_entities", "list_players",
-				"debug_screen", "screenshot", "press_key", "enter_text"}) {
+				"debug_screen", "screenshot", "press_key", "enter_text", "read_screen", "interact_widget"}) {
 			check(actions.contains(new com.google.gson.JsonPrimitive(name)), "action list has " + name);
 		}
 	}
@@ -194,6 +195,43 @@ public class BridgeClientGameTest implements FabricClientGameTest {
 
 		JsonObject closed = action(context, "close_screen", new JsonObject());
 		check(string(closed, "screen") == null, "inventory closed: " + closed);
+	}
+
+	private void useMenuWidgets(ClientGameTestContext context) {
+		action(context, "open_pause_menu", new JsonObject());
+		JsonObject pause = action(context, "read_screen", new JsonObject());
+		checkEquals("PauseScreen", string(pause, "screen"), "read_screen sees the pause menu");
+		check(pause.get("count").getAsInt() > 0, "pause menu has widgets: " + pause);
+
+		JsonObject params = new JsonObject();
+		params.addProperty("label", "Options...");
+		JsonObject clicked = action(context, "interact_widget", params);
+		checkEquals("OptionsScreen", string(clicked, "screen"), "clicking Options opens the options: " + clicked);
+		check(clicked.has("newScreen"), "result has the new screen: " + clicked);
+
+		JsonObject fov = new JsonObject();
+		fov.addProperty("label", "FOV");
+		fov.addProperty("action", "set");
+		fov.addProperty("value", "90");
+		JsonObject set = action(context, "interact_widget", fov);
+		check(set.getAsJsonObject("after").get("label").getAsString().endsWith("90"), "FOV slider shows 90: " + set);
+		checkEquals("90", option(context, "fov"), "FOV option changed");
+
+		fov.addProperty("value", "Normal"); // the slider shows Normal for 70
+		action(context, "interact_widget", fov);
+		checkEquals("70", option(context, "fov"), "FOV option back to 70");
+
+		JsonObject done = new JsonObject();
+		done.addProperty("label", "Done");
+		JsonObject back = action(context, "interact_widget", done);
+		checkEquals("PauseScreen", string(back, "screen"), "Done goes back to the pause menu: " + back);
+		action(context, "close_screen", new JsonObject());
+	}
+
+	private String option(ClientGameTestContext context, String name) {
+		JsonObject params = new JsonObject();
+		params.addProperty("filter", name);
+		return string(action(context, "list_options", params).getAsJsonObject("options"), name);
 	}
 
 	private void pauseAndOptionsMenus(ClientGameTestContext context) {

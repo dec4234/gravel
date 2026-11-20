@@ -44,6 +44,8 @@ Tools:
 | `screenshot` | Image of the game view (world, HUD and open screen). `max_width` scales it down (default 1280), `format` png or jpeg |
 | `press_key` | Sends a key like the real keyboard: `w`, `space`, `escape`, `f3`, `key.mouse.left`, or a key binding (`jump`, `inventory`). `tap` with `hold_ms`, or `press` and `release`, holds a key. Optional `modifiers` (`ctrl+shift`) |
 | `enter_text` | Types into a text box of the open screen (world name, server address, search, anvil, sign, book). Without `text` it lists the text boxes. `field` picks a box, `mode: set` replaces the value, `clear` and `submit` (press enter) |
+| `read_screen` | Reads the open menu as data: title and every widget (buttons, sliders, cycle buttons, check boxes, text boxes, tabs, lists and entries, labels) with index, label, value, state and position. `interactive_only`, `include_hidden` |
+| `interact_widget` | Uses a widget by `widget` index or `label`: `click`, `double_click`, `right_click`, `set` (text, check box, cycle button value, slider `value` or `fraction`), `scroll` (`amount`), `focus`. Lists scroll to the widget. Returns the new screen if one opens |
 | `minecraft_launch_log` | Last lines of the launch log |
 | `list_minecraft_logs` | Lists the client logs (`latest.log`, `debug.log`, old `.log.gz` files), crash reports and the launch log |
 | `scan_minecraft_log` | Searches a log by text or regex, level, thread, logger and time, with context and stack traces. `since_line` gets only new entries. `summary: true` counts levels and groups the warnings, errors and exceptions. Works when the game is stopped or crashed |

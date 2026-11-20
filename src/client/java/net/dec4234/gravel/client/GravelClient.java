@@ -16,6 +16,7 @@ import net.dec4234.gravel.client.bridge.ScreenshotActions;
 import net.dec4234.gravel.client.bridge.ServerActions;
 import net.dec4234.gravel.client.bridge.SurroundingsActions;
 import net.dec4234.gravel.client.bridge.TeleportActions;
+import net.dec4234.gravel.client.bridge.WidgetActions;
 import net.dec4234.gravel.client.bridge.WorldActions;
 import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientLifecycleEvents;
@@ -38,6 +39,7 @@ public class GravelClient implements ClientModInitializer {
 		DebugScreenActions.registerAll(ACTIONS);
 		ScreenshotActions.registerAll(ACTIONS);
 		InputActions.registerAll(ACTIONS);
+		WidgetActions.registerAll(ACTIONS);
 		ChatLog.register();
 
 		int port = BridgeServer.configuredPort();

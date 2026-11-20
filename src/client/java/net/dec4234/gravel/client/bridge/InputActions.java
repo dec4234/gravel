@@ -307,13 +307,13 @@ public final class InputActions {
 	}
 
 	/** Focuses a text box like a click does. Boxes inside containers get the focus path through their parents. */
-	private static void focus(Screen screen, AbstractWidget field) {
+	static void focus(Screen screen, GuiEventListener field) {
 		if (!focusIn(screen, field)) {
 			screen.setFocused(field);
 		}
 	}
 
-	private static boolean focusIn(ContainerEventHandler parent, AbstractWidget field) {
+	private static boolean focusIn(ContainerEventHandler parent, GuiEventListener field) {
 		for (GuiEventListener child : parent.children()) {
 			if (child == field) {
 				parent.setFocused(field);

@@ -152,7 +152,7 @@ class GravelMcpServerTest {
 				"open_inventory", "read_inventory",
 				"move_item", "click_slot", "open_pause_menu", "open_options", "close_screen", "list_options",
 				"set_option", "chunk_info", "teleport", "scan_blocks", "list_entities", "list_players",
-				"debug_screen", "screenshot", "press_key", "enter_text", "minecraft_launch_log", "list_minecraft_logs", "scan_minecraft_log"), names);
+				"debug_screen", "screenshot", "press_key", "enter_text", "read_screen", "interact_widget", "minecraft_launch_log", "list_minecraft_logs", "scan_minecraft_log"), names);
 	}
 
 	@Test
@@ -726,6 +726,36 @@ class GravelMcpServerTest {
 			server(fake.port()).handle(toolCall(2, "enter_text", null));
 			assertFalse(toolIsError(sink.next()));
 			assertEquals(0, fake.calls.get(1).params().size(), "no text only lists the text boxes");
+		}
+	}
+
+	@Test
+	void readScreenPassesArguments() throws Exception {
+		try (FakeBridge fake = new FakeBridge()) {
+			fake.on("read_screen", params -> FakeBridge.Reply.ok(params));
+			JsonObject args = new JsonObject();
+			args.addProperty("interactive_only", true);
+			args.addProperty("include_hidden", false);
+			server(fake.port()).handle(toolCall(1, "read_screen", args));
+			assertFalse(toolIsError(sink.next()));
+			assertEquals(args, fake.calls.get(0).params());
+		}
+	}
+
+	@Test
+	void interactWidgetPassesArguments() throws Exception {
+		try (FakeBridge fake = new FakeBridge()) {
+			fake.on("interact_widget", params -> FakeBridge.Reply.ok(params));
+			JsonObject args = new JsonObject();
+			args.addProperty("widget", 7);
+			args.addProperty("label", "FOV");
+			args.addProperty("action", "set");
+			args.addProperty("value", "90");
+			args.addProperty("fraction", 0.5);
+			args.addProperty("amount", 3);
+			server(fake.port()).handle(toolCall(1, "interact_widget", args));
+			assertFalse(toolIsError(sink.next()));
+			assertEquals(args, fake.calls.get(0).params());
 		}
 	}
 

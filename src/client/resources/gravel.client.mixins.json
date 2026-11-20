@@ -4,12 +4,15 @@
 	"compatibilityLevel": "JAVA_25",
 	"client": [
 		"AbstractContainerScreenInvoker",
+		"AbstractSliderButtonAccessor",
+		"AbstractWidgetAccessor",
 		"ConnectScreenAccessor",
 		"CreateWorldScreenInvoker",
 		"CreativeModeInventoryScreenInvoker",
 		"DebugScreenOverlayAccessor",
 		"DisconnectedScreenMixin",
-		"ExampleClientMixin"
+		"ExampleClientMixin",
+		"ScreenAccessor"
 	],
 	"injectors": {
 		"defaultRequire": 1
