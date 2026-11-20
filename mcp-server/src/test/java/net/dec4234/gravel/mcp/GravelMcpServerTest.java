@@ -152,7 +152,7 @@ class GravelMcpServerTest {
 				"open_inventory", "read_inventory",
 				"move_item", "click_slot", "open_pause_menu", "open_options", "close_screen", "list_options",
 				"set_option", "chunk_info", "teleport", "scan_blocks", "list_entities", "list_players",
-				"debug_screen", "minecraft_launch_log"), names);
+				"debug_screen", "minecraft_launch_log", "list_minecraft_logs", "scan_minecraft_log"), names);
 	}
 
 	@Test

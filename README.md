@@ -42,6 +42,8 @@ Tools:
 | `list_options` | Lists options by their options.txt names, with values |
 | `set_option` | Changes one option and saves it |
 | `minecraft_launch_log` | Last lines of the launch log |
+| `list_minecraft_logs` | Lists the client logs (`latest.log`, `debug.log`, old `.log.gz` files), crash reports and the launch log |
+| `scan_minecraft_log` | Searches a log by text or regex, level, thread, logger and time, with context and stack traces. `since_line` gets only new entries. `summary: true` counts levels and groups the warnings, errors and exceptions. Works when the game is stopped or crashed |
 
 To add an action: register it in `BuiltinActions`, then add a tool in `GravelMcpServer.registerTools()`
 that calls `bridge.action("<name>", args)`.

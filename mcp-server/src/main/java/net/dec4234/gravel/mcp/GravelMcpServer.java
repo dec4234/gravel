@@ -43,6 +43,7 @@ public final class GravelMcpServer {
 
 	private final BridgeClient bridge;
 	private final MinecraftLauncher launcher;
+	private final LogScanner logs;
 
 	public static void main(String[] args) throws Exception {
 		// Stdout is the protocol channel. Keep a handle to it and send all other output to stderr.
@@ -61,6 +62,7 @@ public final class GravelMcpServer {
 		this.out = out;
 		this.bridge = new BridgeClient(port);
 		this.launcher = new MinecraftLauncher(projectDir, bridge);
+		this.logs = new LogScanner(projectDir.resolve("run"), launcher.logFile());
 		registerTools();
 	}
 
@@ -444,6 +446,65 @@ public final class GravelMcpServer {
 						.prop("lines", "integer", "Number of lines from the end. Default 80.")
 						.build(),
 				args -> "Log file: " + launcher.logFile() + "\n" + launcher.tailLog(Schema.optInt(args, "lines", 80))));
+
+		add(new Tool("list_minecraft_logs",
+				"List the Minecraft client log files with size and time: latest.log, debug.log, older logs (.log.gz), "
+						+ "crash reports, and the launch log. These are read from disk, so this works when the game is "
+						+ "stopped or crashed.",
+				Schema.object().build(),
+				args -> logs.list()));
+
+		add(new Tool("scan_minecraft_log",
+				"Search a Minecraft client log for debugging. Works when the game is stopped or crashed. The log is "
+						+ "split into entries: a line like \"[12:00:01] [Render thread/WARN] (logger) text\" and the "
+						+ "lines after it with no header (stack traces). Filters: text or regex pattern, minimum level, "
+						+ "thread, logger, time, exceptions only. Each result line has its line number; > marks the "
+						+ "matching entries and the other lines are context. Returns the newest matches unless from_start "
+						+ "is true. Use the returned lastLine as since_line to see only new entries later. Set summary=true "
+						+ "to get counts per level, the most common warnings and errors, and the exception lines instead.",
+				Schema.object()
+						.prop("source", "string", "latest (default, the INFO log of the current or last run), debug "
+								+ "(also DEBUG lines from Gravel and Fabric), launch (Gradle output), crash (newest crash "
+								+ "report), or a file name from list_minecraft_logs such as 2026-11-20-3.log.gz.")
+						.prop("pattern", "string", "Only entries whose text (with the stack trace) has this text. Optional.")
+						.prop("regex", "boolean", "Use pattern as a Java regex. Default false (plain text).")
+						.prop("ignore_case", "boolean", "Ignore upper and lower case in pattern. Default true.")
+						.prop("min_level", "string", "Only this level and higher: TRACE, DEBUG, INFO, WARN, ERROR, FATAL. Optional.")
+						.prop("thread", "string", "Only threads whose name has this text, for example \"Render thread\" "
+								+ "or \"Server thread\". Optional.")
+						.prop("logger", "string", "Only loggers whose name has this text, for example \"gravel\" or "
+								+ "\"FabricLoader\". Optional.")
+						.prop("since_time", "string", "Only entries at this time or later, HH:MM:SS. Optional.")
+						.prop("since_line", "integer", "Only entries that start after this line number. Default 0.")
+						.prop("exceptions_only", "boolean", "Only entries with an exception or stack trace. Default false.")
+						.prop("context", "integer", "Entries to show before and after each match. Default 0.")
+						.prop("limit", "integer", "Most matching entries to show. Default 50.")
+						.prop("from_start", "boolean", "Show the first matches, not the newest ones. Default false.")
+						.prop("max_lines_per_entry", "integer", "Cut each entry (stack trace) to this many lines, 0 for "
+								+ "no cut. Default 30.")
+						.prop("summary", "boolean", "Give a summary of the log, not the matching entries. Default false.")
+						.prop("top", "integer", "With summary: how many groups to list. Default 20.")
+						.build(),
+				args -> {
+					String source = Schema.optString(args, "source");
+					if (Schema.optBool(args, "summary", false)) {
+						return logs.summary(source, Schema.optInt(args, "top", 20));
+					}
+					return logs.scan(source, new LogScanner.Query(
+							Schema.optString(args, "pattern"),
+							Schema.optBool(args, "regex", false),
+							Schema.optBool(args, "ignore_case", true),
+							Schema.optString(args, "min_level"),
+							Schema.optString(args, "thread"),
+							Schema.optString(args, "logger"),
+							Schema.optString(args, "since_time"),
+							Schema.optInt(args, "since_line", 0),
+							Schema.optBool(args, "exceptions_only", false),
+							Schema.optInt(args, "context", 0),
+							Schema.optInt(args, "limit", 50),
+							Schema.optBool(args, "from_start", false),
+							Schema.optInt(args, "max_lines_per_entry", 30)));
+				}));
 	}
 
 	/** Copies the given arguments, if present and not null, into a new params object for the bridge. */
