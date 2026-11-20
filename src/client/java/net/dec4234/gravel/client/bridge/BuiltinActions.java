@@ -24,6 +24,8 @@ public final class BuiltinActions {
 		o.addProperty("screen", screen == null ? null : screen.getClass().getSimpleName());
 		o.addProperty("world", WorldActions.currentWorld(mc));
 		o.addProperty("worldError", WorldActions.lastError());
+		o.add("serverConnection", ServerActions.statusJson(mc));
+		o.add("session", SessionInfo.json(mc));
 		o.addProperty("latestChatId", ChatLog.latestId());
 		o.addProperty("paused", mc.isPaused());
 		if (inWorld) {

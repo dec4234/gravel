@@ -9,6 +9,7 @@ import net.dec4234.gravel.client.bridge.ChatLog;
 import net.dec4234.gravel.client.bridge.InventoryActions;
 import net.dec4234.gravel.client.bridge.OptionsActions;
 import net.dec4234.gravel.client.bridge.ScreenActions;
+import net.dec4234.gravel.client.bridge.ServerActions;
 import net.dec4234.gravel.client.bridge.WorldActions;
 import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientLifecycleEvents;
@@ -20,6 +21,7 @@ public class GravelClient implements ClientModInitializer {
 	public void onInitializeClient() {
 		BuiltinActions.registerAll(ACTIONS);
 		WorldActions.registerAll(ACTIONS);
+		ServerActions.registerAll(ACTIONS);
 		ChatActions.registerAll(ACTIONS);
 		InventoryActions.registerAll(ACTIONS);
 		ScreenActions.registerAll(ACTIONS);

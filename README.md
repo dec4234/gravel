@@ -1,5 +1,7 @@
 # gravel
 
+Claude code MCP for Minecraft 26.3 as a Fabric mod.
+
 ## Setup
 
 For setup instructions, please see the [Fabric Documentation page](https://docs.fabricmc.net/develop/getting-started/creating-a-project#setting-up) related to the IDE that you are using.
@@ -24,6 +26,8 @@ Tools:
 | `stop_minecraft` | Quits the game |
 | `minecraft_status` | In world or not, screen, world name, player position and health |
 | `join_world` | Joins a singleplayer world (default `temp`). Creates it if missing (creative, cheats on). `recreate: true` deletes it and makes a new one |
+| `join_server` | Joins a multiplayer server by `address` (`host`, `host:port`). Leaves the current world first. Waits for the join. A failed join gives the disconnect screen text (for example "Failed to connect to the server: Connection refused"). Optional `resource_pack`: `prompt`, `enabled` or `disabled` |
+| `read_disconnects` | Recent disconnect screens (connection failures, login rejections, kicks) with title, reason and address |
 | `open_chat` | Opens the chat screen, with optional text in the box |
 | `send_chat` | Sends a message, or a command if it starts with `/`. Returns the replies |
 | `read_chat` | Reads received chat. Use `since_id` to get only new lines |
@@ -41,3 +45,10 @@ Tools:
 
 To add an action: register it in `BuiltinActions`, then add a tool in `GravelMcpServer.registerTools()`
 that calls `bridge.action("<name>", args)`.
+
+### Multiplayer accounts
+
+The dev client starts with an offline account (`Player123`), so it can only join servers with
+`online-mode=false`. `minecraft_status` shows the account in `session.authMode`. If an online-mode server
+rejects the client, the disconnect has a `hint` that says so. Online accounts are not supported yet:
+see `client/bridge/SessionInfo.java` for where to add them.

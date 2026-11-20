@@ -125,6 +125,49 @@ public final class GravelMcpServer {
 					return waitForWorld(name, started, Duration.ofSeconds(Schema.optInt(args, "timeout_seconds", 180)));
 				}));
 
+		add(new Tool("join_server",
+				"Join a multiplayer server by address (host, host:port, or IP). Leaves the current world first if needed "
+						+ "(a singleplayer world is saved). Waits until the player is in the server's world. If the join "
+						+ "fails, the error has the text of the disconnect screen (such as \"Failed to connect to the "
+						+ "server: Connection refused\" or a kick reason). Only offline accounts are supported for now, "
+						+ "so the server must use online-mode=false.",
+				Schema.object()
+						.requiredProp("address", "string", "Server address, for example \"localhost\", \"127.0.0.1:25565\" or \"mc.example.com\".")
+						.prop("resource_pack", "string", "What to do with a server resource pack: prompt (show the vanilla "
+								+ "question screen, the join waits there), enabled (accept) or disabled (decline). Default prompt.")
+						.prop("timeout_seconds", "integer", "How long to wait for the join. Default 120.")
+						.build(),
+				args -> {
+					String address = Schema.optString(args, "address");
+					if (address == null || address.isBlank()) {
+						throw new IllegalArgumentException("address is required");
+					}
+					address = address.trim();
+					JsonObject params = new JsonObject();
+					params.addProperty("address", address);
+					String pack = Schema.optString(args, "resource_pack");
+					if (pack != null) {
+						params.addProperty("resource_pack", pack);
+					}
+					JsonObject started = bridge.action("join_server", params);
+					if (started.has("alreadyOnServer")) {
+						return "Already on server '" + address + "'.";
+					}
+					return waitForServer(address, started, Duration.ofSeconds(Schema.optInt(args, "timeout_seconds", 120)));
+				}));
+
+		add(new Tool("read_disconnects",
+				"Read the recent disconnect screens: connection failures, login rejections and kicks, with the "
+						+ "title, the reason text and the server address. Pass since_id to get only new ones.",
+				Schema.object()
+						.prop("since_id", "integer", "Only return disconnects with an id greater than this. Default 0.")
+						.build(),
+				args -> {
+					JsonObject params = new JsonObject();
+					params.addProperty("since_id", Schema.optInt(args, "since_id", 0));
+					return PRETTY.toJson(bridge.action("read_disconnects", params));
+				}));
+
 		add(new Tool("open_chat",
 				"Open the in-game chat screen, like pressing T (or / when text starts with \"/\"). "
 						+ "Optionally put text in the input box without sending it.",
@@ -331,6 +374,70 @@ public final class GravelMcpServer {
 		}
 		return "Timed out after " + timeout.toSeconds() + "s waiting to join '" + name + "'. Last status:\n"
 				+ (status == null ? "(none)" : PRETTY.toJson(status));
+	}
+
+	/**
+	 * Polls the game status until the join attempt is in the server's world, fails, or time runs out.
+	 * A failed join throws, so the tool result is an error with the disconnect screen text.
+	 */
+	private String waitForServer(String address, JsonObject started, Duration timeout) throws Exception {
+		long attemptId = started.get("attemptId").getAsLong();
+		long deadline = System.nanoTime() + timeout.toNanos();
+		JsonObject status = null;
+		while (System.nanoTime() < deadline) {
+			Thread.sleep(500);
+			if (!bridge.isUp()) {
+				continue;
+			}
+			status = bridge.action("status", null);
+			JsonObject conn = optObject(status, "serverConnection");
+			JsonObject attempt = conn == null ? null : optObject(conn, "attempt");
+			if (attempt == null) {
+				continue;
+			}
+			if (attempt.get("id").getAsLong() != attemptId) {
+				throw new IllegalStateException("Another join started while waiting for '" + address + "'.");
+			}
+			String state = optString(attempt, "state");
+			if ("failed".equals(state) || "disconnected".equals(state)) {
+				throw new IllegalStateException(joinFailure(address, state, attempt));
+			}
+			String screen = Objects.requireNonNullElse(optString(status, "screen"), "");
+			boolean loading = screen.equals("LevelLoadingScreen") || screen.equals("ReceivingLevelScreen");
+			boolean inWorld = status.get("inWorld").getAsBoolean();
+			if ("joined".equals(state) && inWorld && !loading && address.equals(optString(conn, "server"))) {
+				return "Joined server '" + address + "'.\n" + PRETTY.toJson(status);
+			}
+		}
+		return "Timed out after " + timeout.toSeconds() + "s waiting to join '" + address + "'. Check the screen in "
+				+ "the status (a resource pack or code of conduct question can stop the join). Last status:\n"
+				+ (status == null ? "(none)" : PRETTY.toJson(status));
+	}
+
+	/** One message from a failed attempt: the disconnect screen title and reason, or the mod's own error. */
+	static String joinFailure(String address, String state, JsonObject attempt) {
+		StringBuilder sb = new StringBuilder(state.equals("disconnected")
+				? "Joined '" + address + "', then got disconnected"
+				: "Could not join '" + address + "'");
+		JsonObject d = optObject(attempt, "disconnect");
+		if (d != null) {
+			sb.append(": ").append(optString(d, "title")).append(": ").append(optString(d, "reason"));
+			String hint = optString(d, "hint");
+			if (hint != null) {
+				sb.append("\nHint: ").append(hint);
+			}
+		} else if (optString(attempt, "error") != null) {
+			sb.append(": ").append(optString(attempt, "error"));
+		}
+		return sb.toString();
+	}
+
+	private static JsonObject optObject(JsonObject o, String key) {
+		return o.has(key) && o.get(key).isJsonObject() ? o.getAsJsonObject(key) : null;
+	}
+
+	private static String optString(JsonObject o, String key) {
+		return o.has(key) && !o.get(key).isJsonNull() ? o.get(key).getAsString() : null;
 	}
 
 	private void add(Tool tool) {

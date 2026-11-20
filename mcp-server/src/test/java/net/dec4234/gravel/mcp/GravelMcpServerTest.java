@@ -148,7 +148,8 @@ class GravelMcpServerTest {
 			assertEquals("object", o.getAsJsonObject("inputSchema").get("type").getAsString());
 		});
 		assertEquals(List.of("launch_minecraft", "stop_minecraft", "minecraft_status", "join_world",
-				"open_chat", "send_chat", "read_chat", "select_hotbar_slot", "open_inventory", "read_inventory",
+				"join_server", "read_disconnects", "open_chat", "send_chat", "read_chat", "select_hotbar_slot",
+				"open_inventory", "read_inventory",
 				"move_item", "click_slot", "open_pause_menu", "open_options", "close_screen", "list_options",
 				"set_option", "minecraft_launch_log"), names);
 	}
@@ -332,6 +333,121 @@ class GravelMcpServerTest {
 			JsonObject reply = sink.next();
 			assertTrue(toolIsError(reply));
 			assertTrue(toolText(reply).contains("disk full"));
+		}
+	}
+
+	private static JsonObject serverStatus(boolean inWorld, String server, JsonObject attempt) {
+		JsonObject conn = new JsonObject();
+		conn.addProperty("server", server);
+		conn.add("attempt", attempt);
+		JsonObject o = new JsonObject();
+		o.addProperty("inWorld", inWorld);
+		o.addProperty("screen", (String) null);
+		o.add("serverConnection", conn);
+		return o;
+	}
+
+	private static JsonObject attempt(long id, String state) {
+		JsonObject a = new JsonObject();
+		a.addProperty("id", id);
+		a.addProperty("address", "localhost");
+		a.addProperty("state", state);
+		return a;
+	}
+
+	private static FakeBridge.Reply joinStarted(JsonObject params) {
+		JsonObject o = new JsonObject();
+		o.addProperty("attemptId", 7);
+		o.addProperty("scheduled", true);
+		return FakeBridge.Reply.ok(o);
+	}
+
+	private static JsonObject addressArgs(String address) {
+		JsonObject args = new JsonObject();
+		args.addProperty("address", address);
+		return args;
+	}
+
+	@Test
+	void joinServerNeedsAddress() throws Exception {
+		try (FakeBridge fake = new FakeBridge()) {
+			server(fake.port()).handle(toolCall(1, "join_server", null));
+
+			assertTrue(toolIsError(sink.next()));
+			assertTrue(fake.calls.isEmpty());
+		}
+	}
+
+	@Test
+	void joinServerWaitsUntilJoined() throws Exception {
+		try (FakeBridge fake = new FakeBridge()) {
+			fake.on("join_server", GravelMcpServerTest::joinStarted);
+			fake.on("status", params -> FakeBridge.Reply.ok(serverStatus(true, "localhost", attempt(7, "joined"))));
+			JsonObject args = addressArgs(" localhost ");
+			args.addProperty("resource_pack", "enabled");
+			server(fake.port()).handle(toolCall(1, "join_server", args));
+
+			String text = toolText(sink.next());
+			assertTrue(text.startsWith("Joined server 'localhost'."), text);
+			JsonObject sent = fake.calls.getFirst().params();
+			assertEquals("localhost", sent.get("address").getAsString());
+			assertEquals("enabled", sent.get("resource_pack").getAsString());
+		}
+	}
+
+	@Test
+	void joinServerReportsDisconnectScreenText() throws Exception {
+		try (FakeBridge fake = new FakeBridge()) {
+			fake.on("join_server", GravelMcpServerTest::joinStarted);
+			fake.on("status", params -> {
+				JsonObject d = new JsonObject();
+				d.addProperty("title", "Failed to connect to the server");
+				d.addProperty("reason", "Failed to verify username!");
+				d.addProperty("hint", "The server is in online mode");
+				JsonObject a = attempt(7, "failed");
+				a.add("disconnect", d);
+				return FakeBridge.Reply.ok(serverStatus(false, null, a));
+			});
+			server(fake.port()).handle(toolCall(1, "join_server", addressArgs("localhost")));
+
+			JsonObject reply = sink.next();
+			assertTrue(toolIsError(reply));
+			String text = toolText(reply);
+			assertTrue(text.contains("Could not join 'localhost': Failed to connect to the server: "
+					+ "Failed to verify username!"), text);
+			assertTrue(text.contains("Hint: The server is in online mode"), text);
+		}
+	}
+
+	@Test
+	void joinServerReportsModError() throws Exception {
+		try (FakeBridge fake = new FakeBridge()) {
+			fake.on("join_server", GravelMcpServerTest::joinStarted);
+			fake.on("status", params -> {
+				JsonObject a = attempt(7, "failed");
+				a.addProperty("error", "The connect screen did not open");
+				return FakeBridge.Reply.ok(serverStatus(false, null, a));
+			});
+			server(fake.port()).handle(toolCall(1, "join_server", addressArgs("localhost")));
+
+			JsonObject reply = sink.next();
+			assertTrue(toolIsError(reply));
+			assertTrue(toolText(reply).contains("The connect screen did not open"));
+		}
+	}
+
+	@Test
+	void joinServerReportsAlreadyOnServer() throws Exception {
+		try (FakeBridge fake = new FakeBridge()) {
+			fake.on("join_server", params -> {
+				JsonObject o = new JsonObject();
+				o.addProperty("alreadyOnServer", true);
+				return FakeBridge.Reply.ok(o);
+			});
+			server(fake.port()).handle(toolCall(1, "join_server", addressArgs("localhost")));
+
+			assertEquals("Already on server 'localhost'.", toolText(sink.next()));
+			assertFalse(fake.calls.getFirst().params().has("resource_pack"));
 		}
 	}
 
