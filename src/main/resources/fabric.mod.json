@@ -1,0 +1,38 @@
+{
+	"schemaVersion": 1,
+	"id": "gravel",
+	"version": "${version}",
+	"name": "gravel",
+	"description": "This is an example description! Tell everyone what your mod is about!",
+	"authors": [
+		"Me!"
+	],
+	"contact": {
+		"homepage": "https://fabricmc.net/",
+		"sources": "https://github.com/FabricMC/fabric-example-mod"
+	},
+	"license": "MIT",
+	"icon": "assets/gravel/icon.png",
+	"environment": "*",
+	"entrypoints": {
+		"main": [
+			"net.dec4234.gravel.Gravel"
+		],
+		"client": [
+			"net.dec4234.gravel.client.GravelClient"
+		]
+	},
+	"mixins": [
+		"gravel.mixins.json",
+		{
+			"config": "gravel.client.mixins.json",
+			"environment": "client"
+		}
+	],
+	"depends": {
+		"fabricloader": ">=0.20.1",
+		"minecraft": "~26.3",
+		"java": ">=25",
+		"fabric-api": "*"
+	}
+}
