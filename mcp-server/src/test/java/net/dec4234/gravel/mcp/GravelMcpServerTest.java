@@ -152,7 +152,7 @@ class GravelMcpServerTest {
 				"open_inventory", "read_inventory",
 				"move_item", "click_slot", "open_pause_menu", "open_options", "close_screen", "list_options",
 				"set_option", "chunk_info", "teleport", "scan_blocks", "list_entities", "list_players",
-				"minecraft_launch_log"), names);
+				"debug_screen", "minecraft_launch_log"), names);
 	}
 
 	@Test
@@ -592,6 +592,27 @@ class GravelMcpServerTest {
 			assertEquals(32.5, fake.calls.get(0).params().get("max_distance").getAsDouble());
 			assertEquals("zombie,skeleton", fake.calls.get(0).params().get("type").getAsString());
 			assertEquals("list_players", fake.calls.get(1).action());
+			assertEquals(0, fake.calls.get(1).params().size());
+		}
+	}
+
+	@Test
+	void debugScreenPassesOnlyShown() throws Exception {
+		try (FakeBridge fake = new FakeBridge()) {
+			fake.on("debug_screen", params -> {
+				JsonObject o = new JsonObject();
+				o.add("entries", new JsonArray());
+				return FakeBridge.Reply.ok(o);
+			});
+			JsonObject args = new JsonObject();
+			args.addProperty("only_shown", true);
+			server(fake.port()).handle(toolCall(1, "debug_screen", args));
+			JsonObject reply = sink.next();
+			assertFalse(toolIsError(reply), toolText(reply));
+			assertTrue(fake.calls.get(0).params().get("only_shown").getAsBoolean());
+
+			server(fake.port()).handle(toolCall(2, "debug_screen", null));
+			assertFalse(toolIsError(sink.next()));
 			assertEquals(0, fake.calls.get(1).params().size());
 		}
 	}

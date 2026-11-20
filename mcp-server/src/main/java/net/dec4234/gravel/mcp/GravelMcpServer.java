@@ -424,6 +424,20 @@ public final class GravelMcpServer {
 						.build(),
 				args -> PRETTY.toJson(bridge.action("list_players", copy(args, "max_distance")))));
 
+		add(new Tool("debug_screen",
+				"Read all details from the F3 debug screen, also when the screen is closed: game version, FPS, TPS, "
+						+ "memory, system specs (CPU, GPU, display), position (XYZ, block, chunk, facing), player speed, "
+						+ "light levels, heightmaps, biome, local difficulty, day count, the block, fluid and entity the "
+						+ "crosshair targets (with state and tags), chunk, entity and particle render stats, chunk "
+						+ "source stats, spawn counts, sound info, and post effects. Each entry has its id, its F3 status "
+						+ "(alwaysOn, inOverlay, never), whether it shows now, and its text lines. renderToggles lists "
+						+ "the in-world debug drawings (hitboxes, chunk borders and so on) and if they are on.",
+				Schema.object()
+						.prop("only_shown", "boolean", "Only the entries that show on the current F3 screen. Default "
+								+ "false (all entries).")
+						.build(),
+				args -> PRETTY.toJson(bridge.action("debug_screen", copy(args, "only_shown")))));
+
 		add(new Tool("minecraft_launch_log",
 				"Show the last lines of the Gradle/Minecraft launch log. Use this to debug a failed launch.",
 				Schema.object()

@@ -60,7 +60,8 @@ public class BridgeClientGameTest implements FabricClientGameTest {
 		JsonArray actions = get(context, "/actions").getAsJsonArray("actions");
 		for (String name : new String[]{"status", "shutdown", "join_world", "open_chat", "send_chat", "read_chat",
 				"select_hotbar_slot", "open_inventory", "read_inventory", "click_slot", "move_item", "open_pause_menu",
-				"open_options", "close_screen", "list_options", "set_option", "scan_blocks", "list_entities", "list_players"}) {
+				"open_options", "close_screen", "list_options", "set_option", "scan_blocks", "list_entities", "list_players",
+				"debug_screen"}) {
 			check(actions.contains(new com.google.gson.JsonPrimitive(name)), "action list has " + name);
 		}
 	}
@@ -298,6 +299,19 @@ public class BridgeClientGameTest implements FabricClientGameTest {
 		JsonObject players = action(context, "list_players", new JsonObject());
 		checkEquals(0, players.get("nearbyCount").getAsInt(), "no other players nearby: " + players);
 		check(players.has("self"), "list_players names the player: " + players);
+
+		JsonObject debug = action(context, "debug_screen", new JsonObject());
+		JsonArray debugEntries = debug.getAsJsonArray("entries");
+		java.util.Set<String> debugIds = new java.util.HashSet<>();
+		for (com.google.gson.JsonElement e : debugEntries) {
+			debugIds.add(string(e.getAsJsonObject(), "id"));
+		}
+		for (String id : new String[]{"minecraft:game_version", "minecraft:fps", "minecraft:player_position",
+				"minecraft:biome", "minecraft:memory"}) {
+			check(debugIds.contains(id), "debug_screen has " + id + ": " + debugIds);
+		}
+		check(!debug.has("errors"), "debug_screen entries have no errors: " + debug.get("errors"));
+		check(debug.getAsJsonArray("renderToggles").size() > 0, "debug_screen lists render toggles");
 	}
 
 	/** Sends a command and waits for its feedback. */
