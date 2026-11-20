@@ -151,7 +151,7 @@ class GravelMcpServerTest {
 				"join_server", "read_disconnects", "open_chat", "send_chat", "read_chat", "select_hotbar_slot",
 				"open_inventory", "read_inventory",
 				"move_item", "click_slot", "open_pause_menu", "open_options", "close_screen", "list_options",
-				"set_option", "minecraft_launch_log"), names);
+				"set_option", "chunk_info", "teleport", "minecraft_launch_log"), names);
 	}
 
 	@Test
@@ -503,6 +503,47 @@ class GravelMcpServerTest {
 			JsonObject sent = fake.calls.getFirst().params();
 			assertEquals("fov", sent.get("name").getAsString());
 			assertEquals("90", sent.get("value").getAsString());
+		}
+	}
+
+	@Test
+	void teleportSendsCoordinatesAndReportsNewPosition() throws Exception {
+		try (FakeBridge fake = new FakeBridge()) {
+			fake.on("teleport", params -> {
+				JsonObject o = new JsonObject();
+				o.addProperty("sent", "/tp @s 10 ~5 -3");
+				o.addProperty("chatIdBeforeSend", 7);
+				o.add("from", new JsonObject());
+				return FakeBridge.Reply.ok(o);
+			});
+			fake.on("read_chat", params -> {
+				JsonObject o = new JsonObject();
+				o.add("messages", new JsonArray());
+				return FakeBridge.Reply.ok(o);
+			});
+			fake.on("status", params -> {
+				JsonObject player = new JsonObject();
+				player.addProperty("x", 10.5);
+				JsonObject o = new JsonObject();
+				o.add("player", player);
+				return FakeBridge.Reply.ok(o);
+			});
+			JsonObject args = new JsonObject();
+			args.addProperty("x", 10);
+			args.addProperty("y", "~5");
+			args.addProperty("z", "-3");
+			args.addProperty("wait_ms", 0);
+			server(fake.port()).handle(toolCall(1, "teleport", args));
+			JsonObject reply = sink.next();
+			assertFalse(toolIsError(reply), toolText(reply));
+
+			JsonObject sent = fake.calls.get(0).params();
+			assertEquals("10", sent.get("x").getAsString());
+			assertEquals("~5", sent.get("y").getAsString());
+			assertFalse(sent.has("yaw"));
+			assertEquals(7, fake.calls.get(1).params().get("since_id").getAsInt());
+			JsonObject result = JsonParser.parseString(toolText(reply)).getAsJsonObject();
+			assertEquals(10.5, result.getAsJsonObject("to").get("x").getAsDouble());
 		}
 	}
 

@@ -337,6 +337,49 @@ public final class GravelMcpServer {
 					return PRETTY.toJson(bridge.action("set_option", params));
 				}));
 
+		add(new Tool("chunk_info",
+				"Report how many chunks are rendered around the player: renderedChunks (chunk columns drawn in the last "
+						+ "frame), renderedSections (16x16x16 sections drawn, the F3 \"C:\" value), the farthest rendered "
+						+ "chunk distance, loadedChunks (chunks the client holds), the render distance (option and "
+						+ "effective value with the server limit), simulation distance, and whether all sections are built.",
+				Schema.object().build(),
+				args -> PRETTY.toJson(bridge.action("chunk_info", new JsonObject()))));
+
+		add(new Tool("teleport",
+				"Singleplayer only: move the player with the /tp command (tp @s x y z [yaw pitch]). Each value is a number, "
+						+ "or ~ / ~<number> relative to the player, or ^ / ^<number> relative to the view direction. The "
+						+ "world needs cheats on. Returns the command feedback and the position before and after.",
+				Schema.object()
+						.requiredProp("x", "string", "X coordinate, for example \"100\", \"~\" or \"~-20\".")
+						.requiredProp("y", "string", "Y coordinate, for example \"64\" or \"~10\".")
+						.requiredProp("z", "string", "Z coordinate, for example \"-250.5\" or \"~\".")
+						.prop("yaw", "string", "Horizontal rotation in degrees (or ~). Optional.")
+						.prop("pitch", "string", "Vertical rotation in degrees, -90 up to 90 down (or ~). Optional.")
+						.prop("wait_ms", "integer", "How long to wait for the move and feedback before returning. Default 1000.")
+						.build(),
+				args -> {
+					JsonObject params = new JsonObject();
+					for (String key : new String[]{"x", "y", "z", "yaw", "pitch"}) {
+						String value = Schema.optString(args, key);
+						if (value != null) {
+							params.addProperty(key, value);
+						}
+					}
+					JsonObject sent = bridge.action("teleport", params);
+					Thread.sleep(Math.max(0, Schema.optInt(args, "wait_ms", 1000)));
+					JsonObject read = new JsonObject();
+					read.addProperty("since_id", sent.get("chatIdBeforeSend").getAsLong());
+					read.addProperty("limit", 100);
+					JsonObject replies = bridge.action("read_chat", read);
+					JsonObject status = bridge.action("status", null);
+					JsonObject result = new JsonObject();
+					result.add("sent", sent.get("sent"));
+					result.add("from", sent.get("from"));
+					result.add("to", status.get("player"));
+					result.add("replies", replies.get("messages"));
+					return PRETTY.toJson(result);
+				}));
+
 		add(new Tool("minecraft_launch_log",
 				"Show the last lines of the Gradle/Minecraft launch log. Use this to debug a failed launch.",
 				Schema.object()
