@@ -46,6 +46,7 @@ public class BridgeClientGameTest implements FabricClientGameTest {
 		moveItemsInInventory(context);
 		pauseAndOptionsMenus(context);
 		changeOptions(context);
+		seeSurroundings(context);
 		recreateWorld(context);
 		leaveWorld(context);
 	}
@@ -59,7 +60,7 @@ public class BridgeClientGameTest implements FabricClientGameTest {
 		JsonArray actions = get(context, "/actions").getAsJsonArray("actions");
 		for (String name : new String[]{"status", "shutdown", "join_world", "open_chat", "send_chat", "read_chat",
 				"select_hotbar_slot", "open_inventory", "read_inventory", "click_slot", "move_item", "open_pause_menu",
-				"open_options", "close_screen", "list_options", "set_option"}) {
+				"open_options", "close_screen", "list_options", "set_option", "scan_blocks", "list_entities", "list_players"}) {
 			check(actions.contains(new com.google.gson.JsonPrimitive(name)), "action list has " + name);
 		}
 	}
@@ -257,6 +258,54 @@ public class BridgeClientGameTest implements FabricClientGameTest {
 			}
 		}
 		return 0;
+	}
+
+	private void seeSurroundings(ClientGameTestContext context) {
+		command(context, "/setblock ~2 ~ ~ minecraft:gold_block");
+		command(context, "/summon minecraft:pig ~3 ~ ~ {NoAI:1b}");
+
+		JsonObject scanParams = new JsonObject();
+		scanParams.addProperty("radius", 4);
+		scanParams.addProperty("filter", "gold_block");
+		JsonObject scan = action(context, "scan_blocks", scanParams);
+		JsonArray blocks = scan.getAsJsonArray("blocks");
+		checkEquals(1, blocks.size(), "one kind of block matches the filter: " + scan);
+		JsonObject gold = blocks.get(0).getAsJsonObject();
+		checkEquals("minecraft:gold_block", string(gold, "block"), "scanned block id");
+		checkEquals(1, gold.get("count").getAsInt(), "one gold block");
+		check(scan.has("standingOn") && scan.has("lookingAt"), "scan has standingOn and lookingAt: " + scan);
+
+		JsonObject all = action(context, "scan_blocks", new JsonObject());
+		check(all.get("kinds").getAsInt() > 1, "default scan sees several kinds of blocks: " + all.get("kinds"));
+
+		// The new pig needs a few ticks to get to the client.
+		JsonObject entityParams = new JsonObject();
+		entityParams.addProperty("type", "pig");
+		JsonObject entities = null;
+		for (int i = 0; i < 100; i++) {
+			entities = action(context, "list_entities", entityParams);
+			if (entities.get("total").getAsInt() > 0) {
+				break;
+			}
+			context.waitTicks(2);
+		}
+		check(entities.get("total").getAsInt() > 0, "list_entities sees the pig: " + entities);
+		JsonObject pig = entities.getAsJsonArray("entities").get(0).getAsJsonObject();
+		checkEquals("minecraft:pig", string(pig, "type"), "entity type");
+		check(pig.get("distance").getAsDouble() < 8, "pig is near: " + pig);
+		check(pig.has("health"), "pig has health: " + pig);
+
+		JsonObject players = action(context, "list_players", new JsonObject());
+		checkEquals(0, players.get("nearbyCount").getAsInt(), "no other players nearby: " + players);
+		check(players.has("self"), "list_players names the player: " + players);
+	}
+
+	/** Sends a command and waits for its feedback. */
+	private void command(ClientGameTestContext context, String message) {
+		JsonObject params = new JsonObject();
+		params.addProperty("message", message);
+		JsonObject sent = action(context, "send_chat", params);
+		waitForChat(context, sent.get("chatIdBeforeSend").getAsLong());
 	}
 
 	private void recreateWorld(ClientGameTestContext context) {

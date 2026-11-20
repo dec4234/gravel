@@ -151,7 +151,8 @@ class GravelMcpServerTest {
 				"join_server", "read_disconnects", "open_chat", "send_chat", "read_chat", "select_hotbar_slot",
 				"open_inventory", "read_inventory",
 				"move_item", "click_slot", "open_pause_menu", "open_options", "close_screen", "list_options",
-				"set_option", "chunk_info", "teleport", "minecraft_launch_log"), names);
+				"set_option", "chunk_info", "teleport", "scan_blocks", "list_entities", "list_players",
+				"minecraft_launch_log"), names);
 	}
 
 	@Test
@@ -544,6 +545,54 @@ class GravelMcpServerTest {
 			assertEquals(7, fake.calls.get(1).params().get("since_id").getAsInt());
 			JsonObject result = JsonParser.parseString(toolText(reply)).getAsJsonObject();
 			assertEquals(10.5, result.getAsJsonObject("to").get("x").getAsDouble());
+		}
+	}
+
+	@Test
+	void scanBlocksPassesOnlyGivenArguments() throws Exception {
+		try (FakeBridge fake = new FakeBridge()) {
+			fake.on("scan_blocks", params -> {
+				JsonObject o = new JsonObject();
+				o.addProperty("blockCount", 3);
+				return FakeBridge.Reply.ok(o);
+			});
+			JsonObject args = new JsonObject();
+			args.addProperty("radius", 6);
+			args.addProperty("filter", "ore");
+			args.addProperty("exposed_only", true);
+			args.addProperty("not_a_parameter", 1);
+			server(fake.port()).handle(toolCall(1, "scan_blocks", args));
+			JsonObject reply = sink.next();
+			assertFalse(toolIsError(reply), toolText(reply));
+
+			JsonObject sent = fake.calls.get(0).params();
+			assertEquals(6, sent.get("radius").getAsInt());
+			assertEquals("ore", sent.get("filter").getAsString());
+			assertTrue(sent.get("exposed_only").getAsBoolean());
+			assertFalse(sent.has("include_air"));
+			assertFalse(sent.has("not_a_parameter"));
+			assertEquals(3, JsonParser.parseString(toolText(reply)).getAsJsonObject().get("blockCount").getAsInt());
+		}
+	}
+
+	@Test
+	void listEntitiesAndPlayersCallTheirActions() throws Exception {
+		try (FakeBridge fake = new FakeBridge()) {
+			fake.on("list_entities", params -> FakeBridge.Reply.ok(new JsonObject()));
+			fake.on("list_players", params -> FakeBridge.Reply.ok(new JsonObject()));
+			JsonObject args = new JsonObject();
+			args.addProperty("max_distance", 32.5);
+			args.addProperty("type", "zombie,skeleton");
+			server(fake.port()).handle(toolCall(1, "list_entities", args));
+			assertFalse(toolIsError(sink.next()));
+			server(fake.port()).handle(toolCall(2, "list_players", null));
+			assertFalse(toolIsError(sink.next()));
+
+			assertEquals("list_entities", fake.calls.get(0).action());
+			assertEquals(32.5, fake.calls.get(0).params().get("max_distance").getAsDouble());
+			assertEquals("zombie,skeleton", fake.calls.get(0).params().get("type").getAsString());
+			assertEquals("list_players", fake.calls.get(1).action());
+			assertEquals(0, fake.calls.get(1).params().size());
 		}
 	}
 

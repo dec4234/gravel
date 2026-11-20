@@ -380,12 +380,67 @@ public final class GravelMcpServer {
 					return PRETTY.toJson(result);
 				}));
 
+		add(new Tool("scan_blocks",
+				"See the blocks around the player in a box centered on the block the player stands in. Blocks are "
+						+ "grouped by id (most common first), each with its count and [x,y,z] positions sorted nearest "
+						+ "first. Also gives the block under the player's feet and what the crosshair targets. Air is "
+						+ "left out unless include_air is true. Use exposed_only to see only blocks that touch air or "
+						+ "another see-through block (the blocks a player can see), and filter to look for some blocks.",
+				Schema.object()
+						.prop("radius", "integer", "Horizontal distance in blocks from the player, 0-16. Default 4.")
+						.prop("vertical_radius", "integer", "Vertical distance in blocks, 0-16. Default: same as radius.")
+						.prop("filter", "string", "Only block ids that contain one of these comma-separated terms, "
+								+ "for example \"ore\" or \"log,leaves\". Optional.")
+						.prop("exposed_only", "boolean", "Only blocks with at least one see-through neighbor. Default false.")
+						.prop("include_air", "boolean", "Also list air blocks. Default false.")
+						.prop("include_properties", "boolean", "Add block state properties to the id, for example "
+								+ "minecraft:oak_log[axis=y]. Default false.")
+						.prop("max_positions_per_block", "integer", "Most positions to list per block id. Default 64.")
+						.build(),
+				args -> PRETTY.toJson(bridge.action("scan_blocks", copy(args, "radius", "vertical_radius", "filter",
+						"exposed_only", "include_air", "include_properties", "max_positions_per_block")))));
+
+		add(new Tool("list_entities",
+				"List the entities the client knows about near the player (mobs, animals, items, projectiles, "
+						+ "vehicles, other players), nearest first. Each has its numeric id, type, category, name, "
+						+ "position, distance, and health for living entities or the item for dropped items. Also "
+						+ "gives a count for each type. By default it lists all entities in render distance.",
+				Schema.object()
+						.prop("max_distance", "number", "Only entities within this many blocks. Default: render distance.")
+						.prop("type", "string", "Only entity types that contain one of these comma-separated terms, "
+								+ "for example \"zombie\" or \"cow,sheep,pig\". Optional.")
+						.prop("include_players", "boolean", "Also list other players. Default true.")
+						.prop("limit", "integer", "Most entities to list. Default 100. The counts include all.")
+						.build(),
+				args -> PRETTY.toJson(bridge.action("list_entities",
+						copy(args, "max_distance", "type", "include_players", "limit")))));
+
+		add(new Tool("list_players",
+				"Find other players. 'nearby' lists the players the client can see (in render range), nearest first, "
+						+ "with position, distance, health, armor, held items, equipment, game mode and ping. 'online' "
+						+ "lists everyone on the tab list, with inRenderRange to show who is near.",
+				Schema.object()
+						.prop("max_distance", "number", "Only list nearby players within this many blocks. Optional.")
+						.build(),
+				args -> PRETTY.toJson(bridge.action("list_players", copy(args, "max_distance")))));
+
 		add(new Tool("minecraft_launch_log",
 				"Show the last lines of the Gradle/Minecraft launch log. Use this to debug a failed launch.",
 				Schema.object()
 						.prop("lines", "integer", "Number of lines from the end. Default 80.")
 						.build(),
 				args -> "Log file: " + launcher.logFile() + "\n" + launcher.tailLog(Schema.optInt(args, "lines", 80))));
+	}
+
+	/** Copies the given arguments, if present and not null, into a new params object for the bridge. */
+	static JsonObject copy(JsonObject args, String... keys) {
+		JsonObject params = new JsonObject();
+		for (String key : keys) {
+			if (args != null && args.has(key) && !args.get(key).isJsonNull()) {
+				params.add(key, args.get(key).deepCopy());
+			}
+		}
+		return params;
 	}
 
 	/** Polls the game status until the player is in the named world, the mod reports an error, or time runs out. */
