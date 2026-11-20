@@ -34,6 +34,13 @@ class BridgeServerTest {
 		registry.register("checked", (mc, params) -> {
 			throw new Exception("checked problem");
 		});
+		registry.registerAsync("later", (mc, params) -> CompletableFuture.supplyAsync(() -> {
+			JsonObject o = new JsonObject();
+			o.addProperty("done", true);
+			return o;
+		}, CompletableFuture.delayedExecutor(100, java.util.concurrent.TimeUnit.MILLISECONDS)));
+		registry.registerAsync("laterFail", (mc, params) -> CompletableFuture.failedFuture(
+				new IllegalStateException("GPU read failed")));
 		server = new BridgeServer(registry);
 		server.start(0);
 		base = "http://127.0.0.1:" + server.port();
@@ -69,7 +76,7 @@ class BridgeServerTest {
 	@Test
 	void actionsListsRegisteredNames() throws Exception {
 		HttpResponse<String> res = get("/actions");
-		assertEquals("[\"echo\",\"fail\",\"checked\"]", json(res).get("actions").toString());
+		assertEquals("[\"echo\",\"fail\",\"checked\",\"later\",\"laterFail\"]", json(res).get("actions").toString());
 	}
 
 	@Test
@@ -112,6 +119,20 @@ class BridgeServerTest {
 		HttpResponse<String> res = post("/action/checked", "{}");
 		assertEquals(500, res.statusCode());
 		assertTrue(json(res).get("error").getAsString().contains("checked problem"), res.body());
+	}
+
+	@Test
+	void asyncActionWaitsForItsResult() throws Exception {
+		HttpResponse<String> res = post("/action/later", "{}");
+		assertEquals(200, res.statusCode());
+		assertTrue(json(res).get("done").getAsBoolean());
+	}
+
+	@Test
+	void asyncActionFailureBecomes500() throws Exception {
+		HttpResponse<String> res = post("/action/laterFail", "{}");
+		assertEquals(500, res.statusCode());
+		assertEquals("IllegalStateException: GPU read failed", json(res).get("error").getAsString());
 	}
 
 	@Test

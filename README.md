@@ -41,11 +41,15 @@ Tools:
 | `close_screen` | Closes the open screen, like ESC |
 | `list_options` | Lists options by their options.txt names, with values |
 | `set_option` | Changes one option and saves it |
+| `screenshot` | Image of the game view (world, HUD and open screen). `max_width` scales it down (default 1280), `format` png or jpeg |
+| `press_key` | Sends a key like the real keyboard: `w`, `space`, `escape`, `f3`, `key.mouse.left`, or a key binding (`jump`, `inventory`). `tap` with `hold_ms`, or `press` and `release`, holds a key. Optional `modifiers` (`ctrl+shift`) |
+| `enter_text` | Types into a text box of the open screen (world name, server address, search, anvil, sign, book). Without `text` it lists the text boxes. `field` picks a box, `mode: set` replaces the value, `clear` and `submit` (press enter) |
 | `minecraft_launch_log` | Last lines of the launch log |
 | `list_minecraft_logs` | Lists the client logs (`latest.log`, `debug.log`, old `.log.gz` files), crash reports and the launch log |
 | `scan_minecraft_log` | Searches a log by text or regex, level, thread, logger and time, with context and stack traces. `since_line` gets only new entries. `summary: true` counts levels and groups the warnings, errors and exceptions. Works when the game is stopped or crashed |
 
-To add an action: register it in `BuiltinActions`, then add a tool in `GravelMcpServer.registerTools()`
+To add an action: register it in `BuiltinActions` (use `registerAsync` if the result comes later, as for
+`screenshot`), then add a tool in `GravelMcpServer.registerTools()`
 that calls `bridge.action("<name>", args)`.
 
 ### Multiplayer accounts

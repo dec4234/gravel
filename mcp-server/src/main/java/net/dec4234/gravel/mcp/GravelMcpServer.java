@@ -49,6 +49,8 @@ public final class GravelMcpServer {
 		// Stdout is the protocol channel. Keep a handle to it and send all other output to stderr.
 		PrintStream protocolOut = new PrintStream(new FileOutputStream(FileDescriptor.out), true, StandardCharsets.UTF_8);
 		System.setOut(System.err);
+		// Screenshots are scaled with java.awt. It needs no display.
+		System.setProperty("java.awt.headless", "true");
 
 		Path projectDir = findProjectDir();
 		int port = Integer.parseInt(envOr("GRAVEL_BRIDGE_PORT", "25599"));
@@ -440,6 +442,74 @@ public final class GravelMcpServer {
 						.build(),
 				args -> PRETTY.toJson(bridge.action("debug_screen", copy(args, "only_shown")))));
 
+		add(Tool.withContent("screenshot",
+				"Take a screenshot of the game view: the world, the HUD and any open screen or menu, as the player "
+						+ "sees it. Returns the image. Use this to see what a screen looks like or where things are.",
+				Schema.object()
+						.prop("max_width", "integer", "Scale the image down to this width or less. Default "
+								+ Screenshots.DEFAULT_MAX_WIDTH + ". Use 0 for the full size.")
+						.prop("format", "string", "png (default, exact) or jpeg (smaller).")
+						.build(),
+				args -> {
+					JsonObject shot = bridge.action("screenshot", new JsonObject());
+					int width = shot.get("width").getAsInt();
+					int height = shot.get("height").getAsInt();
+					Screenshots.Image image = Screenshots.prepare(shot.get("png").getAsString(),
+							Schema.optInt(args, "max_width", Screenshots.DEFAULT_MAX_WIDTH), Schema.optString(args, "format"));
+					String screen = optString(shot, "screen");
+					String info = "Game view " + width + "x" + height
+							+ (image.width() != width ? ", scaled to " + image.width() + "x" + image.height() : "")
+							+ ". Screen: " + (screen == null ? "none (in game)" : screen) + ".";
+					JsonArray content = new JsonArray();
+					content.add(textContent(info));
+					JsonObject img = new JsonObject();
+					img.addProperty("type", "image");
+					img.addProperty("data", image.base64());
+					img.addProperty("mimeType", image.mimeType());
+					content.add(img);
+					return content;
+				}));
+
+		add(new Tool("press_key",
+				"Send a key to the game, like the real keyboard. With no screen open, keys act through their key "
+						+ "bindings (w walks, space jumps, e opens the inventory, f3 shows the debug screen). With a "
+						+ "screen open, the screen gets the key (escape closes it, tab moves the focus, enter confirms, "
+						+ "arrows and backspace edit a text box). Key names: a-z, 0-9, space, escape, enter, tab, "
+						+ "backspace, f1-f12, up, down, left, right, page.up, left.shift (or shift), left.control (or "
+						+ "ctrl), or options.txt names (key.keyboard.e, key.mouse.left). A key binding name also works "
+						+ "and uses the key it is bound to: jump, sneak, sprint, inventory, attack, use, key.forward. "
+						+ "Mouse buttons only act in game (attack, use, pick block). press_key sends no text "
+						+ "characters, so use enter_text to type. To hold a key, use tap with hold_ms (tap w with "
+						+ "hold_ms 1000 walks forward for one second), or press and then release.",
+				Schema.object()
+						.requiredProp("key", "string", "Key name or key binding, see the description.")
+						.prop("action", "string", "tap (press, wait hold_ms, release; default), press (the key stays "
+								+ "down until a release) or release.")
+						.prop("hold_ms", "integer", "For tap: how long the key stays down, 0-10000 ms. Default 50 "
+								+ "(about one game tick).")
+						.prop("modifiers", "string", "Modifier keys held with the key: shift, ctrl, alt, super, or "
+								+ "more than one such as \"ctrl+shift\". Optional. Example: key a with ctrl selects all "
+								+ "text in a text box.")
+						.build(),
+				args -> PRETTY.toJson(bridge.action("press_key", copy(args, "key", "action", "hold_ms", "modifiers")))));
+
+		add(new Tool("enter_text",
+				"Type text into a text box of the open screen: world name, server address, search boxes, anvil name, "
+						+ "sign, book, command block and others (for chat, use send_chat or open_chat). The text goes "
+						+ "to the focused text box. If the screen has only one text box, it gets the focus. If it has "
+						+ "more, pass field. Call without text to list the text boxes (field index, label, value, "
+						+ "focused, position). Mode type sends the characters like a keyboard, so the box checks them "
+						+ "as for a player. Mode set replaces the full value at once.",
+				Schema.object()
+						.prop("text", "string", "Text to enter. Leave out to only list the text boxes.")
+						.prop("field", "integer", "Index of the text box from the list. Default: the focused box, "
+								+ "or the only box.")
+						.prop("mode", "string", "type (default) or set.")
+						.prop("clear", "boolean", "With mode type: remove the old text first. Default false.")
+						.prop("submit", "boolean", "Press enter after the text. Default false.")
+						.build(),
+				args -> PRETTY.toJson(bridge.action("enter_text", copy(args, "text", "field", "mode", "clear", "submit")))));
+
 		add(new Tool("minecraft_launch_log",
 				"Show the last lines of the Gradle/Minecraft launch log. Use this to debug a failed launch.",
 				Schema.object()
@@ -693,20 +763,16 @@ public final class GravelMcpServer {
 				}
 				// Run off the read loop so long calls (launch) do not block pings.
 				workers.submit(() -> {
-					String text;
+					JsonArray content;
 					boolean isError = false;
 					try {
-						text = tool.handler().call(args);
+						content = tool.handler().call(args);
 					} catch (Exception e) {
 						isError = true;
-						text = e.getClass().getSimpleName() + ": " + e.getMessage();
+						content = new JsonArray();
+						content.add(textContent(e.getClass().getSimpleName() + ": " + e.getMessage()));
 					}
 					JsonObject result = new JsonObject();
-					JsonArray content = new JsonArray();
-					JsonObject c = new JsonObject();
-					c.addProperty("type", "text");
-					c.addProperty("text", text);
-					content.add(c);
 					result.add("content", content);
 					result.addProperty("isError", isError);
 					sendResult(id, result);
@@ -763,11 +829,67 @@ public final class GravelMcpServer {
 		return v == null || v.isBlank() ? fallback : v;
 	}
 
+	static JsonObject textContent(String text) {
+		JsonObject c = new JsonObject();
+		c.addProperty("type", "text");
+		c.addProperty("text", text);
+		return c;
+	}
+
+	/** A tool that answers with text. */
 	@FunctionalInterface
 	interface Handler {
 		String call(JsonObject args) throws Exception;
 	}
 
-	record Tool(String name, String description, JsonObject inputSchema, Handler handler) {
+	/** A tool that answers with MCP content items, such as text and images. */
+	@FunctionalInterface
+	interface ContentHandler {
+		JsonArray call(JsonObject args) throws Exception;
+	}
+
+	/** A tool: its name, description, input schema and handler. */
+	static final class Tool {
+		private final String name;
+		private final String description;
+		private final JsonObject inputSchema;
+		private final ContentHandler handler;
+
+		/** A tool that answers with text. */
+		Tool(String name, String description, JsonObject inputSchema, Handler text) {
+			this(args -> {
+				JsonArray content = new JsonArray();
+				content.add(textContent(text.call(args)));
+				return content;
+			}, name, description, inputSchema);
+		}
+
+		private Tool(ContentHandler handler, String name, String description, JsonObject inputSchema) {
+			this.name = name;
+			this.description = description;
+			this.inputSchema = inputSchema;
+			this.handler = handler;
+		}
+
+		/** A tool that answers with content items, such as an image. */
+		static Tool withContent(String name, String description, JsonObject inputSchema, ContentHandler handler) {
+			return new Tool(handler, name, description, inputSchema);
+		}
+
+		String name() {
+			return name;
+		}
+
+		String description() {
+			return description;
+		}
+
+		JsonObject inputSchema() {
+			return inputSchema;
+		}
+
+		ContentHandler handler() {
+			return handler;
+		}
 	}
 }

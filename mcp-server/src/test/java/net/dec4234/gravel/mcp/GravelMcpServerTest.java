@@ -152,7 +152,7 @@ class GravelMcpServerTest {
 				"open_inventory", "read_inventory",
 				"move_item", "click_slot", "open_pause_menu", "open_options", "close_screen", "list_options",
 				"set_option", "chunk_info", "teleport", "scan_blocks", "list_entities", "list_players",
-				"debug_screen", "minecraft_launch_log", "list_minecraft_logs", "scan_minecraft_log"), names);
+				"debug_screen", "screenshot", "press_key", "enter_text", "minecraft_launch_log", "list_minecraft_logs", "scan_minecraft_log"), names);
 	}
 
 	@Test
@@ -614,6 +614,118 @@ class GravelMcpServerTest {
 			server(fake.port()).handle(toolCall(2, "debug_screen", null));
 			assertFalse(toolIsError(sink.next()));
 			assertEquals(0, fake.calls.get(1).params().size());
+		}
+	}
+
+	/** A PNG of the given size, base64, like the mod sends. */
+	private static String pngBase64(int width, int height) throws Exception {
+		java.awt.image.BufferedImage img = new java.awt.image.BufferedImage(width, height,
+				java.awt.image.BufferedImage.TYPE_INT_ARGB);
+		img.setRGB(0, 0, 0xFFFF0000);
+		ByteArrayOutputStream bytes = new ByteArrayOutputStream();
+		javax.imageio.ImageIO.write(img, "png", bytes);
+		return java.util.Base64.getEncoder().encodeToString(bytes.toByteArray());
+	}
+
+	private FakeBridge screenshotBridge(int width, int height, String screen) throws Exception {
+		String png = pngBase64(width, height);
+		FakeBridge fake = new FakeBridge();
+		fake.on("screenshot", params -> {
+			JsonObject o = new JsonObject();
+			o.addProperty("width", width);
+			o.addProperty("height", height);
+			o.addProperty("screen", screen);
+			o.addProperty("png", png);
+			return FakeBridge.Reply.ok(o);
+		});
+		return fake;
+	}
+
+	private static java.awt.image.BufferedImage image(JsonObject content) throws Exception {
+		byte[] bytes = java.util.Base64.getDecoder().decode(content.get("data").getAsString());
+		return javax.imageio.ImageIO.read(new java.io.ByteArrayInputStream(bytes));
+	}
+
+	@Test
+	void screenshotReturnsImageContent() throws Exception {
+		try (FakeBridge fake = screenshotBridge(200, 100, "PauseScreen")) {
+			server(fake.port()).handle(toolCall(1, "screenshot", null));
+			JsonObject reply = sink.next();
+			assertFalse(toolIsError(reply), toolText(reply));
+			JsonArray content = reply.getAsJsonObject("result").getAsJsonArray("content");
+			assertEquals(2, content.size());
+			assertTrue(toolText(reply).contains("200x100"), toolText(reply));
+			assertTrue(toolText(reply).contains("PauseScreen"), toolText(reply));
+			JsonObject img = content.get(1).getAsJsonObject();
+			assertEquals("image", img.get("type").getAsString());
+			assertEquals("image/png", img.get("mimeType").getAsString());
+			assertEquals(200, image(img).getWidth());
+		}
+	}
+
+	@Test
+	void screenshotScalesDownAndMakesJpeg() throws Exception {
+		try (FakeBridge fake = screenshotBridge(2000, 1000, null)) {
+			JsonObject args = new JsonObject();
+			args.addProperty("max_width", 500);
+			args.addProperty("format", "jpeg");
+			server(fake.port()).handle(toolCall(1, "screenshot", args));
+			JsonObject reply = sink.next();
+			assertFalse(toolIsError(reply), toolText(reply));
+			assertTrue(toolText(reply).contains("scaled to 500x250"), toolText(reply));
+			assertTrue(toolText(reply).contains("in game"), toolText(reply));
+			JsonObject img = reply.getAsJsonObject("result").getAsJsonArray("content").get(1).getAsJsonObject();
+			assertEquals("image/jpeg", img.get("mimeType").getAsString());
+			java.awt.image.BufferedImage decoded = image(img);
+			assertEquals(500, decoded.getWidth());
+			assertEquals(250, decoded.getHeight());
+		}
+	}
+
+	@Test
+	void screenshotRejectsUnknownFormat() throws Exception {
+		try (FakeBridge fake = screenshotBridge(10, 10, null)) {
+			JsonObject args = new JsonObject();
+			args.addProperty("format", "gif");
+			server(fake.port()).handle(toolCall(1, "screenshot", args));
+			JsonObject reply = sink.next();
+			assertTrue(toolIsError(reply));
+			assertTrue(toolText(reply).contains("png or jpeg"), toolText(reply));
+		}
+	}
+
+	@Test
+	void pressKeyPassesArguments() throws Exception {
+		try (FakeBridge fake = new FakeBridge()) {
+			fake.on("press_key", params -> FakeBridge.Reply.ok(params));
+			JsonObject args = new JsonObject();
+			args.addProperty("key", "w");
+			args.addProperty("action", "tap");
+			args.addProperty("hold_ms", 1000);
+			args.addProperty("modifiers", "ctrl+shift");
+			server(fake.port()).handle(toolCall(1, "press_key", args));
+			assertFalse(toolIsError(sink.next()));
+			assertEquals(args, fake.calls.get(0).params());
+		}
+	}
+
+	@Test
+	void enterTextPassesArguments() throws Exception {
+		try (FakeBridge fake = new FakeBridge()) {
+			fake.on("enter_text", params -> FakeBridge.Reply.ok(params));
+			JsonObject args = new JsonObject();
+			args.addProperty("text", "My World");
+			args.addProperty("field", 1);
+			args.addProperty("mode", "set");
+			args.addProperty("clear", true);
+			args.addProperty("submit", true);
+			server(fake.port()).handle(toolCall(1, "enter_text", args));
+			assertFalse(toolIsError(sink.next()));
+			assertEquals(args, fake.calls.get(0).params());
+
+			server(fake.port()).handle(toolCall(2, "enter_text", null));
+			assertFalse(toolIsError(sink.next()));
+			assertEquals(0, fake.calls.get(1).params().size(), "no text only lists the text boxes");
 		}
 	}
 

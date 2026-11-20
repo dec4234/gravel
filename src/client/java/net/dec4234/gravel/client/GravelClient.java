@@ -8,9 +8,11 @@ import net.dec4234.gravel.client.bridge.ChatActions;
 import net.dec4234.gravel.client.bridge.ChatLog;
 import net.dec4234.gravel.client.bridge.ChunkActions;
 import net.dec4234.gravel.client.bridge.DebugScreenActions;
+import net.dec4234.gravel.client.bridge.InputActions;
 import net.dec4234.gravel.client.bridge.InventoryActions;
 import net.dec4234.gravel.client.bridge.OptionsActions;
 import net.dec4234.gravel.client.bridge.ScreenActions;
+import net.dec4234.gravel.client.bridge.ScreenshotActions;
 import net.dec4234.gravel.client.bridge.ServerActions;
 import net.dec4234.gravel.client.bridge.SurroundingsActions;
 import net.dec4234.gravel.client.bridge.TeleportActions;
@@ -34,6 +36,8 @@ public class GravelClient implements ClientModInitializer {
 		TeleportActions.registerAll(ACTIONS);
 		SurroundingsActions.registerAll(ACTIONS);
 		DebugScreenActions.registerAll(ACTIONS);
+		ScreenshotActions.registerAll(ACTIONS);
+		InputActions.registerAll(ACTIONS);
 		ChatLog.register();
 
 		int port = BridgeServer.configuredPort();

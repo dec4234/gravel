@@ -61,7 +61,7 @@ public class BridgeClientGameTest implements FabricClientGameTest {
 		for (String name : new String[]{"status", "shutdown", "join_world", "open_chat", "send_chat", "read_chat",
 				"select_hotbar_slot", "open_inventory", "read_inventory", "click_slot", "move_item", "open_pause_menu",
 				"open_options", "close_screen", "list_options", "set_option", "scan_blocks", "list_entities", "list_players",
-				"debug_screen"}) {
+				"debug_screen", "screenshot", "press_key", "enter_text"}) {
 			check(actions.contains(new com.google.gson.JsonPrimitive(name)), "action list has " + name);
 		}
 	}

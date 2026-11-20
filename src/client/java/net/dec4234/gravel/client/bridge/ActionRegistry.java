@@ -8,6 +8,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Supplier;
 
 /**
@@ -21,6 +22,15 @@ public final class ActionRegistry {
 		JsonObject run(Minecraft mc, JsonObject params) throws Exception;
 	}
 
+	/**
+	 * An action that starts on the client thread and gives its result later, for example after a GPU read
+	 * or after a key is held for some time. The bridge waits for the future, not the client thread.
+	 */
+	@FunctionalInterface
+	public interface AsyncAction {
+		CompletableFuture<JsonObject> start(Minecraft mc, JsonObject params) throws Exception;
+	}
+
 	/** Runs a task on the thread that owns the game state and gives back its result. */
 	@FunctionalInterface
 	public interface ClientThread {
@@ -29,7 +39,7 @@ public final class ActionRegistry {
 
 	private static final long TIMEOUT_SECONDS = 30;
 
-	private final Map<String, Action> actions = new LinkedHashMap<>();
+	private final Map<String, AsyncAction> actions = new LinkedHashMap<>();
 	private final Supplier<Minecraft> client;
 	private final ClientThread clientThread;
 
@@ -45,6 +55,11 @@ public final class ActionRegistry {
 	}
 
 	public ActionRegistry register(String name, Action action) {
+		actions.put(name, (mc, params) -> CompletableFuture.completedFuture(action.run(mc, params)));
+		return this;
+	}
+
+	public ActionRegistry registerAsync(String name, AsyncAction action) {
 		actions.put(name, action);
 		return this;
 	}
@@ -58,17 +73,22 @@ public final class ActionRegistry {
 	}
 
 	public JsonObject run(String name, JsonObject params) throws Exception {
-		Action action = actions.get(name);
+		AsyncAction action = actions.get(name);
 		Minecraft mc = client.get();
-		CompletableFuture<JsonObject> future = clientThread.submit(() -> {
+		long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(TIMEOUT_SECONDS);
+		AtomicReference<CompletableFuture<JsonObject>> pending = new AtomicReference<>();
+		CompletableFuture<JsonObject> started = clientThread.submit(() -> {
 			try {
-				return action.run(mc, params);
+				pending.set(action.start(mc, params));
+				return null;
 			} catch (RuntimeException e) {
 				throw e;
 			} catch (Exception e) {
 				throw new RuntimeException(e);
 			}
 		});
-		return future.get(TIMEOUT_SECONDS, TimeUnit.SECONDS);
+		started.get(TIMEOUT_SECONDS, TimeUnit.SECONDS);
+		long left = Math.max(1, deadline - System.nanoTime());
+		return pending.get().get(left, TimeUnit.NANOSECONDS);
 	}
 }
