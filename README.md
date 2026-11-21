@@ -47,6 +47,14 @@ Tools:
 | `look` | Turns the view: `yaw`/`pitch` (with `relative: true` they add to the view), a point `x`,`y`,`z`, or an `entity` id. Returns the crosshair target |
 | `move` | Walks with the real movement keys: `direction` (`forward`, `back`, `left`, `right`, `forward+left`, `none`), `duration_ms` and/or `distance`, `sprint`, `sneak`, `jump`. Returns positions, distance and `blocked` |
 | `jump` | Jumps once and waits for the landing. `hold_ms` holds the key (swim up, climb, fly up) |
+| `path_to` | Baritone pathfinding to `x`,`y`,`z` (optional `radius`), `x`,`z`, `y`, or the nearest `block`. Returns at once or after `wait_ms`, with the status |
+| `path_status` | Baritone state (`running`, `at_goal`, `failed`, `canceled` and more), goal, estimated time, position and path events. `wait_ms` waits for the end |
+| `path_cancel` | Stops all Baritone tasks |
+| `mine` | Baritone mines `blocks` (comma separated), optional `count` |
+| `follow` | Baritone follows an `entity` id, a `player` or a `type` |
+| `attack_entity` | Kills an `entity` id or the nearest of a `type`: Baritone follows it and Gravel hits it when it is in reach and the attack is charged. Uses the item in the main hand. `path_status` shows `attack.hits`, `targetHealth` and `result` |
+| `baritone_command` | Runs any Baritone `#` command (explore, farm, build, ...) and returns its output |
+| `baritone_settings` | Reads or changes Baritone settings (`allowBreak`, `allowPlace`, ...) |
 | `minecraft_launch_log` | Last lines of the launch log |
 | `list_minecraft_logs` | Lists the client logs (`latest.log`, `debug.log`, old `.log.gz` files), crash reports and the launch log |
 | `scan_minecraft_log` | Searches a log by text or regex, level, thread, logger and time, with context and stack traces. `since_line` gets only new entries. `summary: true` counts levels and groups the warnings, errors and exceptions. Works when the game is stopped or crashed |
@@ -61,3 +69,9 @@ The dev client starts with an offline account (`Player123`), so it can only join
 `online-mode=false`. `minecraft_status` shows the account in `session.authMode`. If an online-mode server
 rejects the client, the disconnect has a `hint` that says so. Online accounts are not supported yet:
 see `client/bridge/SessionInfo.java` for where to add them.
+
+## Pathfinding (optional)
+
+The path tools need [Baritone](https://github.com/cabaletta/baritone) (LGPL-3.0) **v1.20.0**. Gravel does not include it.
+Put [`baritone-api-fabric-1.20.0.jar`](https://github.com/cabaletta/baritone/releases/tag/v1.20.0) in `run/mods`.
+Without it, only the path tools fail. While Baritone moves the player, `move` and `jump` fail: use `path_cancel` first.

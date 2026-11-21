@@ -598,6 +598,8 @@ public final class GravelMcpServer {
 						.build(),
 				args -> PRETTY.toJson(bridge.action("jump", copy(args, "hold_ms", "wait_ms")))));
 
+		addPathfindingTools();
+
 		add(new Tool("minecraft_launch_log",
 				"Show the last lines of the Gradle/Minecraft launch log. Use this to debug a failed launch.",
 				Schema.object()
@@ -663,6 +665,108 @@ public final class GravelMcpServer {
 							Schema.optBool(args, "from_start", false),
 							Schema.optInt(args, "max_lines_per_entry", 30)));
 				}));
+	}
+
+	/** Tools that use the Baritone mod. Without Baritone in run/mods they give an error that says so. */
+	private void addPathfindingTools() {
+		String waitDoc = "Wait until Baritone stops, or this many ms, 0-20000. Default 0 (return at once). Use "
+				+ "path_status to wait more.";
+
+		add(new Tool("path_to",
+				"Walk the player to a place with Baritone pathfinding (needs the Baritone mod in run/mods). Baritone "
+						+ "finds a path and walks, jumps, swims, climbs and (if its settings allow) breaks and places "
+						+ "blocks. Goal: x, y and z (y is the feet level, one above the ground block), with an "
+						+ "optional radius; x and z only (any height); y only (a height); or block (the nearest block "
+						+ "of a type, such as crafting_table). Stops any other Baritone task first. Returns at once "
+						+ "with the status, or after wait_ms. Long trips take more than one call: use path_status "
+						+ "with wait_ms. Status state: running, at_goal, failed, canceled, stopped, finished or idle.",
+				Schema.object()
+						.prop("x", "integer", "Goal X.")
+						.prop("y", "integer", "Goal Y (feet level). Optional with x and z.")
+						.prop("z", "integer", "Goal Z.")
+						.prop("radius", "integer", "With x, y and z: stop within this many blocks. Optional.")
+						.prop("block", "string", "Go to the nearest block of this type, such as minecraft:chest. "
+								+ "Instead of x/y/z.")
+						.prop("wait_ms", "integer", waitDoc)
+						.build(),
+				args -> PRETTY.toJson(bridge.action("path_to", copy(args, "x", "y", "z", "radius", "block", "wait_ms")))));
+
+		add(new Tool("path_status",
+				"The state of Baritone: running or not, the process (such as Custom Goal or Mine), the goal, the "
+						+ "last task Gravel started and its result (at_goal, failed, canceled, stopped, finished), "
+						+ "estimated seconds to the goal, the player position and the recent path events. With "
+						+ "wait_ms it first waits until Baritone stops (or the time ends).",
+				Schema.object()
+						.prop("wait_ms", "integer", "Wait until Baritone stops, or this many ms, 0-20000. Default 0.")
+						.build(),
+				args -> PRETTY.toJson(bridge.action("path_status", copy(args, "wait_ms")))));
+
+		add(new Tool("path_cancel",
+				"Stop all Baritone tasks (path, mine, follow, explore and others) and release the keys. Returns the "
+						+ "status.",
+				Schema.object().build(),
+				args -> PRETTY.toJson(bridge.action("path_cancel", new JsonObject()))));
+
+		add(new Tool("mine",
+				"Mine blocks with Baritone: it finds the blocks, walks to them and breaks them. Works best with the "
+						+ "right tool in the inventory. Stops any other Baritone task first. Runs until count blocks "
+						+ "are mined (0 or none: no limit, use path_cancel to stop).",
+				Schema.object()
+						.requiredProp("blocks", "string", "Block names, comma separated, such as \"diamond_ore, "
+								+ "deepslate_diamond_ore\" or \"minecraft:oak_log\".")
+						.prop("count", "integer", "Stop after this many blocks. Default 0 (no limit).")
+						.prop("wait_ms", "integer", waitDoc)
+						.build(),
+				args -> PRETTY.toJson(bridge.action("mine", copy(args, "blocks", "count", "wait_ms")))));
+
+		add(new Tool("follow",
+				"Follow an entity with Baritone until path_cancel. Give one of: entity (id from list_entities), "
+						+ "player (name) or type (such as minecraft:cow; follows all loaded entities of that type). "
+						+ "Stops any other Baritone task first.",
+				Schema.object()
+						.prop("entity", "integer", "Entity id from list_entities.")
+						.prop("player", "string", "Player name.")
+						.prop("type", "string", "Entity type, such as cow or minecraft:cow.")
+						.prop("wait_ms", "integer", waitDoc)
+						.build(),
+				args -> PRETTY.toJson(bridge.action("follow", copy(args, "entity", "player", "type", "wait_ms")))));
+
+		add(new Tool("attack_entity",
+				"Kill a living entity: Baritone follows it, and Gravel turns to it and hits it each time it is in "
+						+ "reach, the attack is fully charged and the target can take damage again. It uses the item "
+						+ "in the main hand, so select a weapon first for more damage. Give entity (id from "
+						+ "list_entities) or type (the nearest one of that type). Stops any other Baritone task "
+						+ "first. Runs until the target dies, then stops Baritone. The status has attack: target, "
+						+ "hits, targetHealth and result (running, killed, lost, stopped, canceled, left_world, "
+						+ "replaced). Use path_status with wait_ms to wait more, path_cancel to stop.",
+				Schema.object()
+						.prop("entity", "integer", "Entity id from list_entities.")
+						.prop("type", "string", "Entity type, such as cow or minecraft:zombie. Attacks the nearest one.")
+						.prop("wait_ms", "integer", waitDoc)
+						.build(),
+				args -> PRETTY.toJson(bridge.action("attack_entity", copy(args, "entity", "type", "wait_ms")))));
+
+		add(new Tool("baritone_command",
+				"Run any Baritone command, as if typed with the # prefix in chat: explore, farm, build, sel, "
+						+ "waypoints, goto, mine, follow, thisway, surface, help and more. The # is optional. Returns "
+						+ "Baritone's output lines and the status (after wait_ms if a task started).",
+				Schema.object()
+						.requiredProp("command", "string", "The command, such as \"explore\", \"farm 64\" or \"help goto\".")
+						.prop("wait_ms", "integer", waitDoc)
+						.build(),
+				args -> PRETTY.toJson(bridge.action("baritone_command", copy(args, "command", "wait_ms")))));
+
+		add(new Tool("baritone_settings",
+				"Read or change Baritone settings. With name and value: set it (saved to Baritone's settings file). "
+						+ "With name only: show it. With filter: settings whose names have that text. With nothing: "
+						+ "the settings that differ from the default. Useful: allowBreak, allowPlace, allowSprint, "
+						+ "allowParkour, allowInventory, freeLook, blockReachDistance, followRadius.",
+				Schema.object()
+						.prop("name", "string", "Setting name, such as allowBreak. Not case sensitive.")
+						.prop("value", "string", "New value, such as true, 4.5 or minecraft:dirt,minecraft:stone.")
+						.prop("filter", "string", "Search the setting names for this text.")
+						.build(),
+				args -> PRETTY.toJson(bridge.action("baritone_settings", copy(args, "name", "value", "filter")))));
 	}
 
 	/** Copies the given arguments, if present and not null, into a new params object for the bridge. */

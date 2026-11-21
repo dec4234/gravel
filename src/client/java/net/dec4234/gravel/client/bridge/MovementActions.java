@@ -387,6 +387,7 @@ public final class MovementActions {
 			throw new IllegalStateException("Screen " + screen.getClass().getSimpleName()
 					+ " is open, so the player can not move. Close it first with close_screen.");
 		}
+		Pathfinding.requireNotPathing();
 		return player;
 	}
 
