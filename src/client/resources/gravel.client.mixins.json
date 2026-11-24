@@ -12,6 +12,7 @@
 		"DebugScreenOverlayAccessor",
 		"DisconnectedScreenMixin",
 		"ExampleClientMixin",
+		"MusicManagerMixin",
 		"ScreenAccessor"
 	],
 	"injectors": {

@@ -56,8 +56,10 @@ public final class GravelMcpServer {
 		int port = Integer.parseInt(envOr("GRAVEL_BRIDGE_PORT", "25599"));
 		System.err.println("[gravel-mcp] project dir: " + projectDir + ", bridge port: " + port);
 
-		new GravelMcpServer(protocolOut, projectDir, port)
-				.serve(new BufferedReader(new InputStreamReader(System.in, StandardCharsets.UTF_8)));
+		GravelMcpServer server = new GravelMcpServer(protocolOut, projectDir, port);
+		// If the server is stopped by a signal and not by the end of stdin, still close the game it started.
+		Runtime.getRuntime().addShutdownHook(new Thread(server.launcher::stopIfLaunched, "gravel-mcp-stop-minecraft"));
+		server.serve(new BufferedReader(new InputStreamReader(System.in, StandardCharsets.UTF_8)));
 	}
 
 	GravelMcpServer(PrintStream out, Path projectDir, int port) {
@@ -74,15 +76,18 @@ public final class GravelMcpServer {
 		add(new Tool("launch_minecraft",
 				"Start the Minecraft dev client (gradlew runClient) with the Gravel mod loaded, and wait until the mod "
 						+ "bridge is ready. The first launch can take several minutes. Optionally open a singleplayer "
-						+ "world by its folder name right after startup.",
+						+ "world by its folder name right after startup. Music is off unless music is true. The game "
+						+ "closes when the MCP session ends.",
 				Schema.object()
 						.prop("world", "string", "Name of an existing singleplayer world (save folder) to open on start. Optional.")
+						.prop("music", "boolean", "Let the game play music. Default false.")
 						.prop("timeout_seconds", "integer", "How long to wait for the game to be ready. Default 600.")
 						.build(),
 				args -> {
 					String world = Schema.optString(args, "world");
 					int timeout = Schema.optInt(args, "timeout_seconds", 600);
-					return launcher.launch(world, Duration.ofSeconds(timeout));
+					boolean music = args != null && args.has("music") && args.get("music").getAsBoolean();
+					return launcher.launch(world, music, Duration.ofSeconds(timeout));
 				}));
 
 		add(new Tool("stop_minecraft",
@@ -598,6 +603,26 @@ public final class GravelMcpServer {
 						.build(),
 				args -> PRETTY.toJson(bridge.action("jump", copy(args, "hold_ms", "wait_ms")))));
 
+		add(new Tool("reload_resources",
+				"Reload resource packs (like F3+T) and, in singleplayer, data packs (like /reload). Use it for a fast "
+						+ "loop when you make a mod: change textures, models, lang, sounds, recipes, loot tables or tags, "
+						+ "then reload without a restart. Java code changes need a restart. Waits for the reload to end and "
+						+ "returns the pack lists and the time it took. On a multiplayer server, data packs are skipped.",
+				Schema.object()
+						.prop("resources", "boolean", "Reload resource packs (assets). Default true.")
+						.prop("data", "boolean", "Reload data packs (singleplayer only). Default true.")
+						.build(),
+				args -> PRETTY.toJson(bridge.action("reload_resources", copy(args, "resources", "data")))));
+
+		add(new Tool("reload_chunks",
+				"Rebuild all loaded chunks, like F3+A. Use it when block models, textures, colors or render layers "
+						+ "look old after reload_resources, or when chunks show wrong. Waits until all chunk sections are "
+						+ "built again (allBuilt) or wait_ms ends, and gives the section counts and the time it took.",
+				Schema.object()
+						.prop("wait_ms", "integer", "Longest wait for the rebuild, 0-25000. 0 returns at once. Default 10000.")
+						.build(),
+				args -> PRETTY.toJson(bridge.action("reload_chunks", copy(args, "wait_ms")))));
+
 		addPathfindingTools();
 
 		add(new Tool("minecraft_launch_log",
@@ -896,8 +921,9 @@ public final class GravelMcpServer {
 			}
 			handle(msg);
 		}
-		// Stdin closed: Claude Code ended the session. Minecraft keeps running on purpose.
+		// Stdin closed: Claude Code ended the session. Close the game this server started.
 		workers.shutdownNow();
+		launcher.stopIfLaunched();
 	}
 
 	void handle(JsonObject msg) {

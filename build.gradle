@@ -34,6 +34,11 @@ loom {
 			if (quickPlayWorld.isPresent() && !quickPlayWorld.get().isBlank()) {
 				programArgs("--quickPlaySingleplayer", quickPlayWorld.get())
 			}
+			// `-Pmusic=true` lets the game play music. Gravel turns music off by default.
+			def music = providers.gradleProperty("music")
+			if (music.isPresent()) {
+				property("gravel.music", music.get())
+			}
 		}
 	}
 }

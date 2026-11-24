@@ -37,6 +37,11 @@ final class MinecraftLauncher {
 	 * @return a message for the user
 	 */
 	String launch(String world, Duration timeout) throws IOException, InterruptedException {
+		return launch(world, false, timeout);
+	}
+
+	/** Like {@link #launch(String, Duration)}. With music false, the game plays no music (the Gravel default). */
+	String launch(String world, boolean music, Duration timeout) throws IOException, InterruptedException {
 		Process p;
 		synchronized (this) {
 			if (bridge.isUp()) {
@@ -55,6 +60,7 @@ final class MinecraftLauncher {
 				}
 				cmd.add("runClient");
 				cmd.add("--console=plain");
+				cmd.add("-Pmusic=" + music);
 				if (world != null && !world.isBlank()) {
 					cmd.add("-PquickPlayWorld=" + world);
 				}
@@ -119,6 +125,23 @@ final class MinecraftLauncher {
 			return "Minecraft did not stop in 30s, so the process was killed.";
 		}
 		return "The launcher process stopped, but the bridge still answers. Minecraft may have been started outside this MCP server.";
+	}
+
+	/**
+	 * Stops the game if this server started it and it still runs. A game started some other way (for example from
+	 * the IDE) stays open. Called when the MCP session ends.
+	 */
+	void stopIfLaunched() {
+		synchronized (this) {
+			if (process == null || !process.isAlive()) {
+				return;
+			}
+		}
+		try {
+			System.err.println("[gravel-mcp] session ended, stopping Minecraft: " + stop());
+		} catch (InterruptedException e) {
+			Thread.currentThread().interrupt();
+		}
 	}
 
 	String tailLog(int lines) {

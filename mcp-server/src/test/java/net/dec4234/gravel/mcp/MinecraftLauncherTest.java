@@ -66,4 +66,14 @@ class MinecraftLauncherTest {
 		assertEquals("Minecraft stopped.", launcher.stop());
 		assertEquals("shutdown", fake.calls.getFirst().action());
 	}
+
+	@Test
+	void stopIfLaunchedLeavesOtherGamesOpen() throws Exception {
+		try (FakeBridge fake = new FakeBridge()) {
+			// The bridge answers, but this launcher did not start the game, so it must not ask it to quit.
+			MinecraftLauncher launcher = new MinecraftLauncher(project, new BridgeClient(fake.port()));
+			launcher.stopIfLaunched();
+			assertTrue(fake.calls.isEmpty());
+		}
+	}
 }

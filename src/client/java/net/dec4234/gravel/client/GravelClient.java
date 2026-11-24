@@ -12,6 +12,7 @@ import net.dec4234.gravel.client.bridge.InputActions;
 import net.dec4234.gravel.client.bridge.InventoryActions;
 import net.dec4234.gravel.client.bridge.MovementActions;
 import net.dec4234.gravel.client.bridge.OptionsActions;
+import net.dec4234.gravel.client.bridge.ReloadActions;
 import net.dec4234.gravel.client.bridge.Pathfinding;
 import net.dec4234.gravel.client.bridge.ScreenActions;
 import net.dec4234.gravel.client.bridge.ScreenshotActions;
@@ -25,6 +26,11 @@ import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientLifecycleEvents;
 
 public class GravelClient implements ClientModInitializer {
 	public static final ActionRegistry ACTIONS = new ActionRegistry();
+
+	/** Music is off unless the game starts with -Dgravel.music=true (launch_minecraft with music: true). */
+	public static boolean musicEnabled() {
+		return Boolean.getBoolean("gravel.music");
+	}
 
 	@Override
 	public void onInitializeClient() {
@@ -43,6 +49,7 @@ public class GravelClient implements ClientModInitializer {
 		InputActions.registerAll(ACTIONS);
 		WidgetActions.registerAll(ACTIONS);
 		MovementActions.registerAll(ACTIONS);
+		ReloadActions.registerAll(ACTIONS);
 		Pathfinding.registerAll(ACTIONS);
 		ChatLog.register();
 

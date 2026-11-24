@@ -152,7 +152,7 @@ class GravelMcpServerTest {
 				"open_inventory", "read_inventory",
 				"move_item", "click_slot", "open_pause_menu", "open_options", "close_screen", "list_options",
 				"set_option", "chunk_info", "teleport", "scan_blocks", "list_entities", "list_players",
-				"debug_screen", "screenshot", "press_key", "enter_text", "read_screen", "interact_widget", "look", "move", "jump", "path_to", "path_status", "path_cancel", "mine", "follow", "attack_entity", "baritone_command",
+				"debug_screen", "screenshot", "press_key", "enter_text", "read_screen", "interact_widget", "look", "move", "jump", "reload_resources", "reload_chunks", "path_to", "path_status", "path_cancel", "mine", "follow", "attack_entity", "baritone_command",
 				"baritone_settings", "minecraft_launch_log", "list_minecraft_logs", "scan_minecraft_log"), names);
 	}
 
@@ -546,6 +546,47 @@ class GravelMcpServerTest {
 			assertEquals(7, fake.calls.get(1).params().get("since_id").getAsInt());
 			JsonObject result = JsonParser.parseString(toolText(reply)).getAsJsonObject();
 			assertEquals(10.5, result.getAsJsonObject("to").get("x").getAsDouble());
+		}
+	}
+
+	@Test
+	void reloadResourcesPassesOnlyGivenArguments() throws Exception {
+		try (FakeBridge fake = new FakeBridge()) {
+			fake.on("reload_resources", params -> {
+				JsonObject o = new JsonObject();
+				o.addProperty("resourcesReloaded", false);
+				o.addProperty("dataReloaded", true);
+				return FakeBridge.Reply.ok(o);
+			});
+			JsonObject args = new JsonObject();
+			args.addProperty("resources", false);
+			server(fake.port()).handle(toolCall(1, "reload_resources", args));
+			JsonObject reply = sink.next();
+			assertFalse(toolIsError(reply), toolText(reply));
+
+			JsonObject sent = fake.calls.getFirst().params();
+			assertFalse(sent.get("resources").getAsBoolean());
+			assertFalse(sent.has("data"));
+			JsonObject result = JsonParser.parseString(toolText(reply)).getAsJsonObject();
+			assertTrue(result.get("dataReloaded").getAsBoolean());
+		}
+	}
+
+	@Test
+	void reloadChunksPassesWaitTime() throws Exception {
+		try (FakeBridge fake = new FakeBridge()) {
+			fake.on("reload_chunks", params -> {
+				JsonObject o = new JsonObject();
+				o.addProperty("allBuilt", true);
+				return FakeBridge.Reply.ok(o);
+			});
+			JsonObject args = new JsonObject();
+			args.addProperty("wait_ms", 500);
+			server(fake.port()).handle(toolCall(1, "reload_chunks", args));
+			JsonObject reply = sink.next();
+			assertFalse(toolIsError(reply), toolText(reply));
+			assertEquals(500, fake.calls.getFirst().params().get("wait_ms").getAsInt());
+			assertTrue(JsonParser.parseString(toolText(reply)).getAsJsonObject().get("allBuilt").getAsBoolean());
 		}
 	}
 

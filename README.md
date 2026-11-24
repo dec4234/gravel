@@ -2,7 +2,7 @@
 
 Claude code MCP for Minecraft 26.3 as a Fabric mod.
 
-This MCP is intended for rapid local development and should not be used on public servers.
+This MCP is intended for rapid local development of Minecraft mods and server content, it should not be used on public servers.
 
 ## Claude Code MCP
 
@@ -13,6 +13,9 @@ Gravel has two parts:
   `client/bridge/BuiltinActions.java` and run on the client thread.
 - **The MCP server** (`mcp-server/`). Claude Code starts it over stdio (see `.mcp.json`).
   It starts Minecraft with `gradlew runClient` and sends tool calls to the bridge.
+  When the Claude Code session ends, it closes the game that it started. A game you started yourself stays open.
+- **Music** is off in the dev client (`-Dgravel.music=true` or `gradlew runClient -Pmusic=true` turns it on).
+  The music volume in `options.txt` does not change.
 
 Build both with `./gradlew build`, then restart Claude Code in this folder and approve the `gravel` server.
 
@@ -20,7 +23,7 @@ Tools:
 
 | Tool | What it does |
 |---|---|
-| `launch_minecraft` | Starts the dev client (optional `world` opens a save on start) |
+| `launch_minecraft` | Starts the dev client (optional `world` opens a save on start). Music is off unless `music: true` |
 | `stop_minecraft` | Quits the game |
 | `minecraft_status` | In world or not, screen, world name, player position and health |
 | `join_world` | Joins a singleplayer world (default `temp`). Creates it if missing (creative, cheats on). `recreate: true` deletes it and makes a new one |
@@ -47,6 +50,8 @@ Tools:
 | `look` | Turns the view: `yaw`/`pitch` (with `relative: true` they add to the view), a point `x`,`y`,`z`, or an `entity` id. Returns the crosshair target |
 | `move` | Walks with the real movement keys: `direction` (`forward`, `back`, `left`, `right`, `forward+left`, `none`), `duration_ms` and/or `distance`, `sprint`, `sneak`, `jump`. Returns positions, distance and `blocked` |
 | `jump` | Jumps once and waits for the landing. `hold_ms` holds the key (swim up, climb, fly up) |
+| `reload_resources` | Reloads resource packs (F3+T) and, in singleplayer, data packs (/reload). Use it for a fast loop when you make a mod. `resources: false` or `data: false` skips one |
+| `reload_chunks` | Rebuilds all loaded chunks (F3+A) and waits until they are built again (`wait_ms`, default 10000). `allBuilt` tells if the rebuild ended in time |
 | `path_to` | Baritone pathfinding to `x`,`y`,`z` (optional `radius`), `x`,`z`, `y`, or the nearest `block`. Returns at once or after `wait_ms`, with the status |
 | `path_status` | Baritone state (`running`, `at_goal`, `failed`, `canceled` and more), goal, estimated time, position and path events. `wait_ms` waits for the end |
 | `path_cancel` | Stops all Baritone tasks |
