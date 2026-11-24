@@ -54,6 +54,36 @@ public final class ChatLog {
 	}
 
 	/**
+	 * The oldest line after {@code sinceId} whose text matches, as JSON (id, time, type, sender, text), or null.
+	 *
+	 * @param match            gets the line text; null matches every line
+	 * @param includeActionBar also look at action bar (overlay) text
+	 */
+	public static synchronized JsonObject find(long sinceId, java.util.function.Predicate<String> match, boolean includeActionBar) {
+		for (Entry e : ENTRIES) {
+			if (e.id() <= sinceId || !includeActionBar && e.type().equals("actionbar")) {
+				continue;
+			}
+			if (match == null || match.test(e.text())) {
+				return json(e);
+			}
+		}
+		return null;
+	}
+
+	private static JsonObject json(Entry e) {
+		JsonObject o = new JsonObject();
+		o.addProperty("id", e.id());
+		o.addProperty("time", e.time().toString());
+		o.addProperty("type", e.type());
+		if (e.sender() != null) {
+			o.addProperty("sender", e.sender());
+		}
+		o.addProperty("text", e.text());
+		return o;
+	}
+
+	/**
 	 * @param sinceId only lines with an id greater than this
 	 * @param limit   at most this many lines (the newest ones)
 	 * @param includeActionBar include action bar (overlay) text
@@ -73,15 +103,7 @@ public final class ChatLog {
 			picked.addFirst(e);
 		}
 		for (Entry e : picked) {
-			JsonObject o = new JsonObject();
-			o.addProperty("id", e.id());
-			o.addProperty("time", e.time().toString());
-			o.addProperty("type", e.type());
-			if (e.sender() != null) {
-				o.addProperty("sender", e.sender());
-			}
-			o.addProperty("text", e.text());
-			lines.add(o);
+			lines.add(json(e));
 		}
 		JsonObject result = new JsonObject();
 		result.add("messages", lines);

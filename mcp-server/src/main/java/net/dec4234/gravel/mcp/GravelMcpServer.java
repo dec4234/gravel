@@ -31,6 +31,10 @@ import java.util.concurrent.Executors;
 public final class GravelMcpServer {
 	private static final String PROTOCOL_FALLBACK = "2025-06-18";
 	private static final Gson GSON = new GsonBuilder().serializeNulls().disableHtmlEscaping().create();
+	/** The mod stops wait_for after this time, so its action ends before the bridge time limit (30 s). */
+	static final int MAX_WAIT_MS = 25_000;
+	private static final int DEFAULT_REPLY_WAIT_MS = 2000;
+	private static final int REPLY_SETTLE_TICKS = 2;
 	private static final Gson PRETTY = new GsonBuilder().setPrettyPrinting().serializeNulls().disableHtmlEscaping().create();
 
 	private final PrintStream out;
@@ -195,22 +199,32 @@ public final class GravelMcpServer {
 
 		add(new Tool("send_chat",
 				"Send a chat message, or a command if the text starts with \"/\" (for example \"/time set day\"). "
-						+ "Returns the chat lines received soon after, such as command feedback.",
+						+ "Waits until a reply line arrives (or a line that contains wait_for), not longer than "
+						+ "wait_ms, then returns the chat lines received since the send, such as command feedback.",
 				Schema.object()
 						.requiredProp("message", "string", "The chat message or /command to send.")
-						.prop("wait_ms", "integer", "How long to wait for replies before returning. Default 1000.")
+						.prop("wait_ms", "integer", "Longest wait for a reply, 0-" + MAX_WAIT_MS + " ms. Default "
+								+ DEFAULT_REPLY_WAIT_MS + ". 0 returns at once.")
+						.prop("wait_for", "string", "Wait for a line that contains this text (case-insensitive). "
+								+ "Default: any line.")
+						.prop("wait_for_regex", "boolean", "wait_for is a regex. Default false.")
 						.build(),
 				args -> {
 					JsonObject params = new JsonObject();
 					params.addProperty("message", Schema.optString(args, "message"));
 					JsonObject sent = bridge.action("send_chat", params);
-					Thread.sleep(Math.max(0, Schema.optInt(args, "wait_ms", 1000)));
+					long before = sent.get("chatIdBeforeSend").getAsLong();
+					JsonObject wait = waitForReply(before, args);
 					JsonObject read = new JsonObject();
-					read.addProperty("since_id", sent.get("chatIdBeforeSend").getAsLong());
+					read.addProperty("since_id", before);
 					read.addProperty("limit", 100);
 					JsonObject replies = bridge.action("read_chat", read);
 					JsonObject result = new JsonObject();
 					result.add("sent", sent.get("sent"));
+					if (wait != null) {
+						result.add("replyFound", wait.get("matched"));
+						result.add("waitedMs", wait.get("elapsedMs"));
+					}
 					result.add("replies", replies.get("messages"));
 					result.add("latestId", replies.get("latestId"));
 					return PRETTY.toJson(result);
@@ -231,6 +245,35 @@ public final class GravelMcpServer {
 					params.addProperty("include_action_bar", Schema.optBool(args, "include_action_bar", false));
 					return PRETTY.toJson(bridge.action("read_chat", params));
 				}));
+
+		add(new Tool("wait_for",
+				"Wait for a number of client ticks (20 ticks = 1 s), or until conditions are true: a chat line "
+						+ "matches, a screen is open, the player is in a world or not, the player is near a position. "
+						+ "With more than one condition, all must be true. With ticks and conditions, it stops at "
+						+ "the first of the two. Returns matched, stoppedBy (condition, ticks or timeout), the "
+						+ "matching chat line, the screen and the position.",
+				Schema.object()
+						.prop("ticks", "integer", "Stop after this many client ticks, 0-500. Alone, it is a plain wait.")
+						.prop("timeout_ms", "integer", "Longest wait, 0-" + MAX_WAIT_MS + " ms. Default 10000 ("
+								+ MAX_WAIT_MS + " with ticks).")
+						.prop("chat", "string", "Wait for a chat line that contains this text (case-insensitive). "
+								+ "\"\" matches any new line.")
+						.prop("chat_regex", "boolean", "chat is a regex (Java syntax, find). Default false.")
+						.prop("since_id", "integer", "Only look at chat lines after this id (for example latestId "
+								+ "from read_chat). Default: lines that arrive after the call starts.")
+						.prop("include_action_bar", "boolean", "Also look at action bar text. Default false.")
+						.prop("screen", "string", "Wait until this screen is open, by class name such as "
+								+ "InventoryScreen or PauseScreen (the \"Screen\" end is optional), or none for no screen.")
+						.prop("in_world", "boolean", "Wait until the player is in a world and it is not loading (true), or not in a world (false).")
+						.prop("x", "number", "Wait until the player is near this X. Any of x, y, z can be given.")
+						.prop("y", "number", "Wait until the player is near this Y.")
+						.prop("z", "number", "Wait until the player is near this Z.")
+						.prop("radius", "number", "How near to x/y/z, in blocks. Default 1.")
+						.prop("settle_ticks", "integer", "After the conditions are true, wait this many more ticks "
+								+ "(0-40), for example to get more chat lines. Default 0.")
+						.build(),
+				args -> PRETTY.toJson(bridge.action("wait_for", copy(args, "ticks", "timeout_ms", "chat", "chat_regex",
+						"since_id", "include_action_bar", "screen", "in_world", "x", "y", "z", "radius", "settle_ticks")))));
 
 		add(new Tool("select_hotbar_slot",
 				"Select a hotbar slot, like pressing a number key. Slot 0 is key 1, slot 8 is key 9. "
@@ -364,7 +407,8 @@ public final class GravelMcpServer {
 						.requiredProp("z", "string", "Z coordinate, for example \"-250.5\" or \"~\".")
 						.prop("yaw", "string", "Horizontal rotation in degrees (or ~). Optional.")
 						.prop("pitch", "string", "Vertical rotation in degrees, -90 up to 90 down (or ~). Optional.")
-						.prop("wait_ms", "integer", "How long to wait for the move and feedback before returning. Default 1000.")
+						.prop("wait_ms", "integer", "Longest wait for the command feedback, 0-" + MAX_WAIT_MS + " ms. "
+								+ "Default " + DEFAULT_REPLY_WAIT_MS + ". It returns when the feedback arrives.")
 						.build(),
 				args -> {
 					JsonObject params = new JsonObject();
@@ -375,9 +419,10 @@ public final class GravelMcpServer {
 						}
 					}
 					JsonObject sent = bridge.action("teleport", params);
-					Thread.sleep(Math.max(0, Schema.optInt(args, "wait_ms", 1000)));
+					long before = sent.get("chatIdBeforeSend").getAsLong();
+					JsonObject wait = waitForReply(before, args);
 					JsonObject read = new JsonObject();
-					read.addProperty("since_id", sent.get("chatIdBeforeSend").getAsLong());
+					read.addProperty("since_id", before);
 					read.addProperty("limit", 100);
 					JsonObject replies = bridge.action("read_chat", read);
 					JsonObject status = bridge.action("status", null);
@@ -385,6 +430,10 @@ public final class GravelMcpServer {
 					result.add("sent", sent.get("sent"));
 					result.add("from", sent.get("from"));
 					result.add("to", status.get("player"));
+					if (wait != null) {
+						result.add("replyFound", wait.get("matched"));
+						result.add("waitedMs", wait.get("elapsedMs"));
+					}
 					result.add("replies", replies.get("messages"));
 					return PRETTY.toJson(result);
 				}));
@@ -603,6 +652,36 @@ public final class GravelMcpServer {
 						.build(),
 				args -> PRETTY.toJson(bridge.action("jump", copy(args, "hold_ms", "wait_ms")))));
 
+		add(new Tool("attack",
+				"Left click on what the crosshair targets, the same as the attack mouse button (use look first to "
+						+ "aim). An entity: one hit with the main hand item (for a full fight use attack_entity). A "
+						+ "block: break it. In creative it breaks at once. In survival, with no hold_ms, the button "
+						+ "stays down until the block breaks (at most 20 s). With hold_ms the button stays down that "
+						+ "long (in creative, it breaks one more block each 5 ticks). Nothing targeted: a swing. No "
+						+ "screen can be open. Returns the target before, the main hand item, attackStrength (1 is a "
+						+ "full charge), block (before, after, broken, highestDestroyStage 0-9) or entity (alive, "
+						+ "healthBefore, healthAfter), stoppedBy, and the target after.",
+				Schema.object()
+						.prop("hold_ms", "integer", "Hold the attack button this long, 0-20000 ms. Optional.")
+						.build(),
+				args -> PRETTY.toJson(bridge.action("attack", copy(args, "hold_ms")))));
+
+		add(new Tool("use",
+				"Right click on what the crosshair targets, the same as the use mouse button (use look first to "
+						+ "aim, and select_hotbar_slot to pick the item). It places a block, uses a block (door, "
+						+ "lever, button, chest, crafting table), uses the held item (bucket, flint and steel, spawn "
+						+ "egg, ender pearl), or interacts with an entity (trade, ride, shear, feed). With no hold_ms "
+						+ "it is a tap. With hold_ms the button stays down that long, to eat or drink (about 1700 "
+						+ "ms), draw a bow, or block with a shield. While it is down and no item is in use, the game "
+						+ "uses again each 4 ticks (so it can place more blocks). Stops if a screen opens (such as a "
+						+ "chest). Returns the target before, usedItem, mainHand and offHand (before and after), "
+						+ "blockChanges at the target block and the block in front of the clicked face, entity "
+						+ "(alive, health), the screen and the target after.",
+				Schema.object()
+						.prop("hold_ms", "integer", "Hold the use button this long, 0-20000 ms. Default: a tap.")
+						.build(),
+				args -> PRETTY.toJson(bridge.action("use", copy(args, "hold_ms")))));
+
 		add(new Tool("reload_resources",
 				"Reload resource packs (like F3+T) and, in singleplayer, data packs (like /reload). Use it for a fast "
 						+ "loop when you make a mod: change textures, models, lang, sounds, recipes, loot tables or tags, "
@@ -803,6 +882,29 @@ public final class GravelMcpServer {
 			}
 		}
 		return params;
+	}
+
+	/**
+	 * Waits in the game for a chat line after {@code sinceId}: a line that contains wait_for, or any line. Stops
+	 * after wait_ms. Returns the wait_for result, or null if wait_ms is 0.
+	 */
+	private JsonObject waitForReply(long sinceId, JsonObject args) throws Exception {
+		int waitMs = Schema.optInt(args, "wait_ms", DEFAULT_REPLY_WAIT_MS);
+		if (waitMs < 0 || waitMs > MAX_WAIT_MS) {
+			throw new IllegalArgumentException("wait_ms must be 0-" + MAX_WAIT_MS);
+		}
+		if (waitMs == 0) {
+			return null;
+		}
+		String text = Schema.optString(args, "wait_for");
+		JsonObject params = new JsonObject();
+		params.addProperty("chat", text == null ? "" : text);
+		params.addProperty("chat_regex", Schema.optBool(args, "wait_for_regex", false));
+		params.addProperty("since_id", sinceId);
+		params.addProperty("timeout_ms", waitMs);
+		// Feedback can have more than one line. They come in the same tick or just after.
+		params.addProperty("settle_ticks", REPLY_SETTLE_TICKS);
+		return bridge.action("wait_for", params);
 	}
 
 	/** Polls the game status until the player is in the named world, the mod reports an error, or time runs out. */

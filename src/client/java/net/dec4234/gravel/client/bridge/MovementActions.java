@@ -332,7 +332,7 @@ public final class MovementActions {
 
 	/** A step that runs once per tick on the client thread. It gives the result when the action is done, else null. */
 	@FunctionalInterface
-	private interface Step {
+	interface Step {
 		JsonObject run();
 	}
 
@@ -340,7 +340,7 @@ public final class MovementActions {
 	 * Runs a step each tick on the client thread until it gives a result. If the step fails, cleanup runs
 	 * (for example to release the held keys).
 	 */
-	private static CompletableFuture<JsonObject> everyTick(Minecraft mc, Runnable cleanup, Step step) {
+	static CompletableFuture<JsonObject> everyTick(Minecraft mc, Runnable cleanup, Step step) {
 		CompletableFuture<JsonObject> done = new CompletableFuture<>();
 		schedule(mc, cleanup, step, done);
 		return done;
@@ -380,12 +380,12 @@ public final class MovementActions {
 	}
 
 	/** The player, in a world with no screen open, so that movement keys act. */
-	private static LocalPlayer requireControl(Minecraft mc) {
+	static LocalPlayer requireControl(Minecraft mc) {
 		LocalPlayer player = InventoryActions.requirePlayer(mc);
 		Screen screen = mc.gui.screen();
 		if (screen != null) {
 			throw new IllegalStateException("Screen " + screen.getClass().getSimpleName()
-					+ " is open, so the player can not move. Close it first with close_screen.");
+					+ " is open, so the player can not move or act. Close it first with close_screen.");
 		}
 		Pathfinding.requireNotPathing();
 		return player;

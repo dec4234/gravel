@@ -12,6 +12,8 @@
 		"DebugScreenOverlayAccessor",
 		"DisconnectedScreenMixin",
 		"ExampleClientMixin",
+		"MinecraftInvoker",
+		"MinecraftMixin",
 		"MusicManagerMixin",
 		"ScreenAccessor"
 	],

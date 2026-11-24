@@ -30,8 +30,9 @@ Tools:
 | `join_server` | Joins a multiplayer server by `address` (`host`, `host:port`). Leaves the current world first. Waits for the join. A failed join gives the disconnect screen text (for example "Failed to connect to the server: Connection refused"). Optional `resource_pack`: `prompt`, `enabled` or `disabled` |
 | `read_disconnects` | Recent disconnect screens (connection failures, login rejections, kicks) with title, reason and address |
 | `open_chat` | Opens the chat screen, with optional text in the box |
-| `send_chat` | Sends a message, or a command if it starts with `/`. Returns the replies |
+| `send_chat` | Sends a message, or a command if it starts with `/`. Waits until a reply arrives (or a line that contains `wait_for`), not longer than `wait_ms` (default 2000), and returns the replies |
 | `read_chat` | Reads received chat. Use `since_id` to get only new lines |
+| `wait_for` | Waits for `ticks` client ticks, or until conditions are true: a `chat` line matches (text or `chat_regex`), a `screen` is open (or `none`), `in_world`, or the player is near `x`/`y`/`z` (`radius`). `timeout_ms` (max 25000), `settle_ticks`. Returns `matched` and `stoppedBy` |
 | `select_hotbar_slot` | Selects hotbar slot 0-8, like a number key |
 | `open_inventory` | Opens the inventory, like E (creative opens on the Survival Inventory tab) |
 | `read_inventory` | Lists the items in the open container, or the player inventory, and the cursor item |
@@ -42,6 +43,12 @@ Tools:
 | `close_screen` | Closes the open screen, like ESC |
 | `list_options` | Lists options by their options.txt names, with values |
 | `set_option` | Changes one option and saves it |
+| `chunk_info` | Rendered chunks and sections (the F3 "C:" value), farthest rendered chunk, loaded chunks, render and simulation distance, and if all sections are built |
+| `teleport` | Singleplayer only (cheats on): moves the player with `/tp` to `x`,`y`,`z`, optional `yaw`/`pitch`. Values can be numbers, `~` (relative) or `^` (view direction). Returns the command feedback and the position before and after |
+| `scan_blocks` | Blocks in a box around the player (`radius`, `vertical_radius`, max 16), grouped by id with counts and positions (nearest first). Also the block under the feet and the crosshair target. `filter`, `exposed_only`, `include_air`, `include_properties`, `max_positions_per_block` |
+| `list_entities` | Entities near the player, nearest first, with id, type, name, position, distance and health (or the item for dropped items), and a count for each type. `max_distance`, `type`, `include_players`, `limit` |
+| `list_players` | Other players: `nearby` (in render range, with position, health, armor, equipment, game mode and ping) and `online` (the tab list). Optional `max_distance` |
+| `debug_screen` | All F3 debug screen data, also when F3 is closed: version, FPS, TPS, memory, system specs, position, light, biome, crosshair target, render stats and more. `renderToggles` shows the debug drawings (hitboxes, chunk borders). `only_shown` gives only the entries on the current F3 screen |
 | `screenshot` | Image of the game view (world, HUD and open screen). `max_width` scales it down (default 1280), `format` png or jpeg |
 | `press_key` | Sends a key like the real keyboard: `w`, `space`, `escape`, `f3`, `key.mouse.left`, or a key binding (`jump`, `inventory`). `tap` with `hold_ms`, or `press` and `release`, holds a key. Optional `modifiers` (`ctrl+shift`) |
 | `enter_text` | Types into a text box of the open screen (world name, server address, search, anvil, sign, book). Without `text` it lists the text boxes. `field` picks a box, `mode: set` replaces the value, `clear` and `submit` (press enter) |
@@ -50,6 +57,8 @@ Tools:
 | `look` | Turns the view: `yaw`/`pitch` (with `relative: true` they add to the view), a point `x`,`y`,`z`, or an `entity` id. Returns the crosshair target |
 | `move` | Walks with the real movement keys: `direction` (`forward`, `back`, `left`, `right`, `forward+left`, `none`), `duration_ms` and/or `distance`, `sprint`, `sneak`, `jump`. Returns positions, distance and `blocked` |
 | `jump` | Jumps once and waits for the landing. `hold_ms` holds the key (swim up, climb, fly up) |
+| `attack` | Left click on the crosshair target: hits an entity, or breaks a block (in survival it holds until the block breaks). `hold_ms` holds the button. Returns the block or entity before and after |
+| `use` | Right click on the crosshair target: places a block, uses a block (door, chest), uses the held item, or interacts with an entity. `hold_ms` holds the button (eat, draw a bow). Returns item, block and entity changes |
 | `reload_resources` | Reloads resource packs (F3+T) and, in singleplayer, data packs (/reload). Use it for a fast loop when you make a mod. `resources: false` or `data: false` skips one |
 | `reload_chunks` | Rebuilds all loaded chunks (F3+A) and waits until they are built again (`wait_ms`, default 10000). `allBuilt` tells if the rebuild ended in time |
 | `path_to` | Baritone pathfinding to `x`,`y`,`z` (optional `radius`), `x`,`z`, `y`, or the nearest `block`. Returns at once or after `wait_ms`, with the status |
@@ -79,4 +88,4 @@ see `client/bridge/SessionInfo.java` for where to add them.
 
 The path tools need [Baritone](https://github.com/cabaletta/baritone) (LGPL-3.0) **v1.20.0**. Gravel does not include it.
 Put [`baritone-api-fabric-1.20.0.jar`](https://github.com/cabaletta/baritone/releases/tag/v1.20.0) in `run/mods`.
-Without it, only the path tools fail. While Baritone moves the player, `move` and `jump` fail: use `path_cancel` first.
+Without it, only the path tools fail. While Baritone moves the player, `move`, `jump`, `attack` and `use` fail: use `path_cancel` first.

@@ -148,11 +148,11 @@ class GravelMcpServerTest {
 			assertEquals("object", o.getAsJsonObject("inputSchema").get("type").getAsString());
 		});
 		assertEquals(List.of("launch_minecraft", "stop_minecraft", "minecraft_status", "join_world",
-				"join_server", "read_disconnects", "open_chat", "send_chat", "read_chat", "select_hotbar_slot",
+				"join_server", "read_disconnects", "open_chat", "send_chat", "read_chat", "wait_for", "select_hotbar_slot",
 				"open_inventory", "read_inventory",
 				"move_item", "click_slot", "open_pause_menu", "open_options", "close_screen", "list_options",
 				"set_option", "chunk_info", "teleport", "scan_blocks", "list_entities", "list_players",
-				"debug_screen", "screenshot", "press_key", "enter_text", "read_screen", "interact_widget", "look", "move", "jump", "reload_resources", "reload_chunks", "path_to", "path_status", "path_cancel", "mine", "follow", "attack_entity", "baritone_command",
+				"debug_screen", "screenshot", "press_key", "enter_text", "read_screen", "interact_widget", "look", "move", "jump", "attack", "use", "reload_resources", "reload_chunks", "path_to", "path_status", "path_cancel", "mine", "follow", "attack_entity", "baritone_command",
 				"baritone_settings", "minecraft_launch_log", "list_minecraft_logs", "scan_minecraft_log"), names);
 	}
 
@@ -275,6 +275,89 @@ class GravelMcpServerTest {
 					result.getAsJsonArray("replies").get(0).getAsJsonObject().get("text").getAsString());
 			// The read must start after the last line seen before the send.
 			assertEquals(41, fake.calls.get(1).params().get("since_id").getAsLong());
+		}
+	}
+
+	@Test
+	void sendChatWaitsForReplyInGameInsteadOfSleeping() throws Exception {
+		try (FakeBridge fake = new FakeBridge()) {
+			fake.on("send_chat", params -> {
+				JsonObject o = new JsonObject();
+				o.addProperty("sent", params.get("message").getAsString());
+				o.addProperty("chatIdBeforeSend", 41);
+				return FakeBridge.Reply.ok(o);
+			});
+			fake.on("wait_for", params -> {
+				JsonObject o = new JsonObject();
+				o.addProperty("matched", true);
+				o.addProperty("elapsedMs", 120);
+				return FakeBridge.Reply.ok(o);
+			});
+			fake.on("read_chat", params -> {
+				JsonObject o = new JsonObject();
+				o.add("messages", new JsonArray());
+				o.addProperty("latestId", 43);
+				return FakeBridge.Reply.ok(o);
+			});
+
+			JsonObject args = new JsonObject();
+			args.addProperty("message", "/give @s stone");
+			args.addProperty("wait_ms", 5000);
+			args.addProperty("wait_for", "Gave");
+			server(fake.port()).handle(toolCall(1, "send_chat", args));
+			JsonObject reply = sink.next();
+			assertFalse(toolIsError(reply), toolText(reply));
+
+			assertEquals(List.of("send_chat", "wait_for", "read_chat"),
+					fake.calls.stream().map(FakeBridge.Call::action).toList());
+			JsonObject wait = fake.calls.get(1).params();
+			assertEquals("Gave", wait.get("chat").getAsString());
+			assertEquals(41, wait.get("since_id").getAsLong());
+			assertEquals(5000, wait.get("timeout_ms").getAsInt());
+			JsonObject result = JsonParser.parseString(toolText(reply)).getAsJsonObject();
+			assertTrue(result.get("replyFound").getAsBoolean());
+			assertEquals(120, result.get("waitedMs").getAsInt());
+		}
+	}
+
+	@Test
+	void sendChatRejectsTooLongWait() throws Exception {
+		try (FakeBridge fake = new FakeBridge()) {
+			fake.on("send_chat", params -> {
+				JsonObject o = new JsonObject();
+				o.addProperty("sent", "hi");
+				o.addProperty("chatIdBeforeSend", 1);
+				return FakeBridge.Reply.ok(o);
+			});
+			JsonObject args = new JsonObject();
+			args.addProperty("message", "hi");
+			args.addProperty("wait_ms", GravelMcpServer.MAX_WAIT_MS + 1);
+			server(fake.port()).handle(toolCall(1, "send_chat", args));
+			assertTrue(toolIsError(sink.next()));
+		}
+	}
+
+	@Test
+	void waitForPassesOnlyGivenArguments() throws Exception {
+		try (FakeBridge fake = new FakeBridge()) {
+			fake.on("wait_for", params -> {
+				JsonObject o = new JsonObject();
+				o.addProperty("matched", true);
+				o.addProperty("stoppedBy", "condition");
+				return FakeBridge.Reply.ok(o);
+			});
+			JsonObject args = new JsonObject();
+			args.addProperty("screen", "none");
+			args.addProperty("ticks", 40);
+			server(fake.port()).handle(toolCall(1, "wait_for", args));
+			JsonObject reply = sink.next();
+			assertFalse(toolIsError(reply), toolText(reply));
+
+			JsonObject sent = fake.calls.getFirst().params();
+			assertEquals(2, sent.size());
+			assertEquals("none", sent.get("screen").getAsString());
+			assertEquals(40, sent.get("ticks").getAsInt());
+			assertEquals("condition", JsonParser.parseString(toolText(reply)).getAsJsonObject().get("stoppedBy").getAsString());
 		}
 	}
 
