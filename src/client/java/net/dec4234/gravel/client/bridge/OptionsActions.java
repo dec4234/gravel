@@ -64,7 +64,7 @@ public final class OptionsActions {
 		Options options = mc.options;
 		Map<String, String> before = readAll(options);
 		if (!before.containsKey(name)) {
-			throw new IllegalArgumentException("Unknown option '" + name + "'. Use list_options to see the names.");
+			throw new IllegalArgumentException("Unknown option '" + name + "'. Use options with action list to see the names.");
 		}
 
 		process(options, new Setter(name, value));

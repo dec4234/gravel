@@ -11,9 +11,9 @@
 		"CreativeModeInventoryScreenInvoker",
 		"DebugScreenOverlayAccessor",
 		"DisconnectedScreenMixin",
-		"ExampleClientMixin",
 		"MinecraftInvoker",
 		"MinecraftMixin",
+		"MouseHandlerAccessor",
 		"MusicManagerMixin",
 		"ScreenAccessor"
 	],

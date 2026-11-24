@@ -249,7 +249,7 @@ public final class WidgetActions {
 		return String.valueOf(value);
 	}
 
-	private static String className(Object o) {
+	static String className(Object o) {
 		Class<?> c = o.getClass();
 		while (c.isAnonymousClass() && c.getSuperclass() != null) {
 			c = c.getSuperclass();
@@ -288,13 +288,13 @@ public final class WidgetActions {
 		if (screen == null) {
 			JsonObject o = new JsonObject();
 			o.add("screen", null);
-			o.addProperty("note", "No screen is open (in game). Use open_pause_menu, open_inventory or press_key to open one.");
+			o.addProperty("note", "No screen is open (in game). Use screen with action open, or press_key, to open one.");
 			return o;
 		}
 		return screenState(mc, screen, includeHidden, interactiveOnly);
 	}
 
-	private static JsonObject screenState(Minecraft mc, Screen screen, boolean includeHidden, boolean interactiveOnly) {
+	static JsonObject screenState(Minecraft mc, Screen screen, boolean includeHidden, boolean interactiveOnly) {
 		JsonObject o = new JsonObject();
 		o.addProperty("screen", className(screen));
 		o.addProperty("title", screen.getTitle().getString());
@@ -302,9 +302,12 @@ public final class WidgetActions {
 		o.addProperty("height", screen.height);
 		o.addProperty("guiScale", mc.getWindow().getGuiScale());
 		o.addProperty("pausesGame", screen.isPauseScreen());
+		String note = "Parts that the screen draws itself (not widgets) are not in this list. To use them, take a "
+				+ "screenshot and use screen_input with x and y at their position.";
 		if (screen instanceof AbstractContainerScreen<?>) {
-			o.addProperty("note", "This screen has item slots. Use read_inventory, click_slot and move_item for the slots.");
+			note = "This screen has item slots. Use the inventory tool for the slots. " + note;
 		}
+		o.addProperty("note", note);
 		JsonArray widgets = new JsonArray();
 		for (Node node : walk(screen)) {
 			if (!includeHidden && !shown(node)) {
@@ -326,7 +329,7 @@ public final class WidgetActions {
 	private static JsonObject interactWidget(Minecraft mc, JsonObject params) throws Exception {
 		Screen screen = mc.gui.screen();
 		if (screen == null) {
-			throw new IllegalStateException("No screen is open. Open a screen first (open_pause_menu, open_options, press_key e).");
+			throw new IllegalStateException("No screen is open. Open a screen first (screen with action open, or press_key e).");
 		}
 		String action = params.has("action") ? params.get("action").getAsString().toLowerCase(Locale.ROOT) : "click";
 		List<Node> nodes = walk(screen);
@@ -377,14 +380,14 @@ public final class WidgetActions {
 			int index = params.get("widget").getAsInt();
 			if (index < 0 || index >= nodes.size()) {
 				throw new IllegalArgumentException("widget " + index + " does not exist. Screen " + className(screen)
-						+ " has widgets 0-" + (nodes.size() - 1) + ". Call read_screen again, the screen can change.");
+						+ " has widgets 0-" + (nodes.size() - 1) + ". Read the screen again, it can change.");
 			}
 			return nodes.get(index);
 		}
 		String label = params.has("label") && !params.get("label").isJsonNull() ? params.get("label").getAsString().trim() : "";
 		if (label.isEmpty()) {
 			if (required) {
-				throw new IllegalArgumentException("Pass widget (index from read_screen) or label (text on the widget).");
+				throw new IllegalArgumentException("Pass widget (index from the screen read) or label (text on the widget).");
 			}
 			return null;
 		}
@@ -409,7 +412,7 @@ public final class WidgetActions {
 		}
 		if (matches.isEmpty()) {
 			throw new IllegalArgumentException("No visible widget has the label '" + label + "' on screen "
-					+ className(screen) + ". Call read_screen to see the widgets.");
+					+ className(screen) + ". Read the screen to see the widgets.");
 		}
 		Set<String> found = new LinkedHashSet<>();
 		for (Node n : matches) {

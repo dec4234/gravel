@@ -158,7 +158,7 @@ public final class InventoryActions {
 		}
 		if (!menu.getCarried().isEmpty()) {
 			throw new IllegalStateException("The cursor already holds " + describe(menu.getCarried())
-					+ ". Put it down first (click_slot).");
+					+ ". Put it down first (inventory click).");
 		}
 		ItemStack source = menu.getSlot(from).getItem();
 		if (source.isEmpty()) {
@@ -232,7 +232,7 @@ public final class InventoryActions {
 
 	private static AbstractContainerScreen<?> requireContainerScreen(Minecraft mc) {
 		if (!(mc.gui.screen() instanceof AbstractContainerScreen<?> screen)) {
-			throw new IllegalStateException("No inventory or container screen is open. Call open_inventory first.");
+			throw new IllegalStateException("No inventory or container screen is open. Use screen with action open and name inventory first.");
 		}
 		showCreativeInventoryTab(screen);
 		return screen;

@@ -148,12 +148,11 @@ class GravelMcpServerTest {
 			assertEquals("object", o.getAsJsonObject("inputSchema").get("type").getAsString());
 		});
 		assertEquals(List.of("launch_minecraft", "stop_minecraft", "minecraft_status", "join_world",
-				"join_server", "read_disconnects", "open_chat", "send_chat", "read_chat", "wait_for", "select_hotbar_slot",
-				"open_inventory", "read_inventory",
-				"move_item", "click_slot", "open_pause_menu", "open_options", "close_screen", "list_options",
-				"set_option", "chunk_info", "teleport", "scan_blocks", "list_entities", "list_players",
-				"debug_screen", "screenshot", "press_key", "enter_text", "read_screen", "interact_widget", "look", "move", "jump", "attack", "use", "reload_resources", "reload_chunks", "path_to", "path_status", "path_cancel", "mine", "follow", "attack_entity", "baritone_command",
-				"baritone_settings", "minecraft_launch_log", "list_minecraft_logs", "scan_minecraft_log"), names);
+				"join_server", "read_disconnects", "chat", "wait_for", "inventory", "screen", "options", "chunk_info",
+				"teleport", "scan_blocks", "list_entities", "list_players", "debug_screen", "screenshot", "press_key",
+				"screen_input", "look", "move", "jump", "attack", "use", "reload_resources", "reload_chunks", "path_to",
+				"path_status", "path_cancel", "mine", "follow", "attack_entity", "baritone_command", "baritone_settings",
+				"minecraft_launch_log", "list_minecraft_logs", "scan_minecraft_log"), names);
 	}
 
 	@Test
@@ -205,7 +204,7 @@ class GravelMcpServerTest {
 
 	@Test
 	void bridgeFailureBecomesToolError() throws Exception {
-		server(FakeBridge.unusedPort()).handle(toolCall(1, "read_chat", null));
+		server(FakeBridge.unusedPort()).handle(toolCall(1, "chat", null));
 		JsonObject reply = sink.next();
 		assertTrue(toolIsError(reply));
 		assertFalse(toolText(reply).isBlank());
@@ -215,7 +214,7 @@ class GravelMcpServerTest {
 	void readChatPassesDefaults() throws Exception {
 		try (FakeBridge fake = new FakeBridge()) {
 			fake.on("read_chat", params -> FakeBridge.Reply.ok(new JsonObject()));
-			server(fake.port()).handle(toolCall(1, "read_chat", null));
+			server(fake.port()).handle(toolCall(1, "chat", null));
 			assertFalse(toolIsError(sink.next()));
 
 			JsonObject sent = fake.calls.getFirst().params();
@@ -231,13 +230,14 @@ class GravelMcpServerTest {
 			fake.on("open_chat", params -> FakeBridge.Reply.ok(new JsonObject()));
 			GravelMcpServer server = server(fake.port());
 
-			server.handle(toolCall(1, "open_chat", null));
+			JsonObject args = new JsonObject();
+			args.addProperty("action", "open");
+			server.handle(toolCall(1, "chat", args));
 			assertEquals("Chat screen opened.", toolText(sink.next()));
 			assertFalse(fake.calls.get(0).params().has("text"));
 
-			JsonObject args = new JsonObject();
-			args.addProperty("text", "/give");
-			server.handle(toolCall(2, "open_chat", args));
+			args.addProperty("message", "/give");
+			server.handle(toolCall(2, "chat", args));
 			sink.next();
 			assertEquals("/give", fake.calls.get(1).params().get("text").getAsString());
 		}
@@ -266,7 +266,7 @@ class GravelMcpServerTest {
 			JsonObject args = new JsonObject();
 			args.addProperty("message", "/time set day");
 			args.addProperty("wait_ms", 0);
-			server(fake.port()).handle(toolCall(1, "send_chat", args));
+			server(fake.port()).handle(toolCall(1, "chat", args));
 
 			JsonObject result = JsonParser.parseString(toolText(sink.next())).getAsJsonObject();
 			assertEquals("/time set day", result.get("sent").getAsString());
@@ -304,7 +304,7 @@ class GravelMcpServerTest {
 			args.addProperty("message", "/give @s stone");
 			args.addProperty("wait_ms", 5000);
 			args.addProperty("wait_for", "Gave");
-			server(fake.port()).handle(toolCall(1, "send_chat", args));
+			server(fake.port()).handle(toolCall(1, "chat", args));
 			JsonObject reply = sink.next();
 			assertFalse(toolIsError(reply), toolText(reply));
 
@@ -332,7 +332,7 @@ class GravelMcpServerTest {
 			JsonObject args = new JsonObject();
 			args.addProperty("message", "hi");
 			args.addProperty("wait_ms", GravelMcpServer.MAX_WAIT_MS + 1);
-			server(fake.port()).handle(toolCall(1, "send_chat", args));
+			server(fake.port()).handle(toolCall(1, "chat", args));
 			assertTrue(toolIsError(sink.next()));
 		}
 	}
@@ -543,9 +543,10 @@ class GravelMcpServerTest {
 			GravelMcpServer server = server(fake.port());
 
 			JsonObject args = new JsonObject();
+			args.addProperty("action", "move");
 			args.addProperty("from", 36);
 			args.addProperty("to", 9);
-			server.handle(toolCall(1, "move_item", args));
+			server.handle(toolCall(1, "inventory", args));
 			assertFalse(toolIsError(sink.next()));
 			JsonObject sent = fake.calls.get(0).params();
 			assertEquals(36, sent.get("from").getAsInt());
@@ -553,7 +554,7 @@ class GravelMcpServerTest {
 			assertFalse(sent.has("count"));
 
 			args.addProperty("count", 5);
-			server.handle(toolCall(2, "move_item", args));
+			server.handle(toolCall(2, "inventory", args));
 			sink.next();
 			assertEquals(5, fake.calls.get(1).params().get("count").getAsInt());
 		}
@@ -564,8 +565,9 @@ class GravelMcpServerTest {
 		try (FakeBridge fake = new FakeBridge()) {
 			fake.on("click_slot", params -> FakeBridge.Reply.ok(new JsonObject()));
 			JsonObject args = new JsonObject();
+			args.addProperty("action", "click");
 			args.addProperty("slot", 40);
-			server(fake.port()).handle(toolCall(1, "click_slot", args));
+			server(fake.port()).handle(toolCall(1, "inventory", args));
 			assertFalse(toolIsError(sink.next()));
 
 			JsonObject sent = fake.calls.getFirst().params();
@@ -582,7 +584,7 @@ class GravelMcpServerTest {
 			JsonObject args = new JsonObject();
 			args.addProperty("name", "fov");
 			args.addProperty("value", 90);
-			server(fake.port()).handle(toolCall(1, "set_option", args));
+			server(fake.port()).handle(toolCall(1, "options", args));
 			assertFalse(toolIsError(sink.next()));
 
 			JsonObject sent = fake.calls.getFirst().params();
@@ -835,22 +837,150 @@ class GravelMcpServerTest {
 	}
 
 	@Test
-	void enterTextPassesArguments() throws Exception {
+	void typeGoesToEnterText() throws Exception {
 		try (FakeBridge fake = new FakeBridge()) {
 			fake.on("enter_text", params -> FakeBridge.Reply.ok(params));
+			fake.on("interact_widget", params -> FakeBridge.Reply.ok(params));
 			JsonObject args = new JsonObject();
+			args.addProperty("action", "type");
 			args.addProperty("text", "My World");
-			args.addProperty("field", 1);
 			args.addProperty("mode", "set");
 			args.addProperty("clear", true);
 			args.addProperty("submit", true);
-			server(fake.port()).handle(toolCall(1, "enter_text", args));
+			server(fake.port()).handle(toolCall(1, "screen_input", args));
 			assertFalse(toolIsError(sink.next()));
-			assertEquals(args, fake.calls.get(0).params());
+			JsonObject sent = fake.calls.get(0).params();
+			assertEquals("enter_text", fake.calls.get(0).action());
+			assertEquals("My World", sent.get("text").getAsString());
+			assertEquals("set", sent.get("mode").getAsString());
+			assertTrue(sent.get("clear").getAsBoolean());
+			assertTrue(sent.get("submit").getAsBoolean());
+			assertFalse(sent.has("action"));
+		}
+	}
 
-			server(fake.port()).handle(toolCall(2, "enter_text", null));
+	@Test
+	void typeWithWidgetFocusesItFirst() throws Exception {
+		try (FakeBridge fake = new FakeBridge()) {
+			fake.on("enter_text", params -> FakeBridge.Reply.ok(params));
+			fake.on("interact_widget", params -> FakeBridge.Reply.ok(params));
+			JsonObject args = new JsonObject();
+			args.addProperty("action", "type");
+			args.addProperty("widget", 4);
+			args.addProperty("text", "hello");
+			server(fake.port()).handle(toolCall(1, "screen_input", args));
 			assertFalse(toolIsError(sink.next()));
-			assertEquals(0, fake.calls.get(1).params().size(), "no text only lists the text boxes");
+			assertEquals(List.of("interact_widget", "enter_text"),
+					fake.calls.stream().map(FakeBridge.Call::action).toList());
+			JsonObject focus = fake.calls.get(0).params();
+			assertEquals(4, focus.get("widget").getAsInt());
+			assertEquals("focus", focus.get("action").getAsString());
+		}
+	}
+
+	@Test
+	void rightClickAtPointGoesToMouse() throws Exception {
+		try (FakeBridge fake = new FakeBridge()) {
+			fake.on("mouse", params -> FakeBridge.Reply.ok(params));
+			JsonObject args = new JsonObject();
+			args.addProperty("action", "right_click");
+			args.addProperty("x", 10);
+			args.addProperty("y", 20);
+			server(fake.port()).handle(toolCall(1, "screen_input", args));
+			assertFalse(toolIsError(sink.next()));
+			JsonObject sent = fake.calls.get(0).params();
+			assertEquals("mouse", fake.calls.get(0).action());
+			assertEquals("click", sent.get("action").getAsString());
+			assertEquals("right", sent.get("button").getAsString());
+			assertEquals(10, sent.get("x").getAsInt());
+		}
+	}
+
+	@Test
+	void screenInputRejectsWrongTargets() throws Exception {
+		try (FakeBridge fake = new FakeBridge()) {
+			GravelMcpServer server = server(fake.port());
+			JsonObject both = new JsonObject();
+			both.addProperty("widget", 1);
+			both.addProperty("x", 5);
+			server.handle(toolCall(1, "screen_input", both));
+			assertTrue(toolIsError(sink.next()));
+
+			JsonObject setAtPoint = new JsonObject();
+			setAtPoint.addProperty("action", "set");
+			setAtPoint.addProperty("x", 5);
+			setAtPoint.addProperty("y", 5);
+			server.handle(toolCall(2, "screen_input", setAtPoint));
+			assertTrue(toolIsError(sink.next()));
+
+			JsonObject dragOnWidget = new JsonObject();
+			dragOnWidget.addProperty("action", "drag");
+			dragOnWidget.addProperty("widget", 2);
+			server.handle(toolCall(3, "screen_input", dragOnWidget));
+			assertTrue(toolIsError(sink.next()));
+
+			JsonObject unknown = new JsonObject();
+			unknown.addProperty("action", "lick");
+			server.handle(toolCall(4, "screen_input", unknown));
+			assertTrue(toolIsError(sink.next()));
+			assertTrue(fake.calls.isEmpty());
+		}
+	}
+
+	@Test
+	void screenOpenUsesTheName() throws Exception {
+		try (FakeBridge fake = new FakeBridge()) {
+			fake.on("open_inventory", params -> FakeBridge.Reply.ok(new JsonObject()));
+			fake.on("open_pause_menu", params -> FakeBridge.Reply.ok(new JsonObject()));
+			fake.on("open_options", params -> FakeBridge.Reply.ok(new JsonObject()));
+			fake.on("close_screen", params -> FakeBridge.Reply.ok(new JsonObject()));
+			GravelMcpServer server = server(fake.port());
+			int id = 1;
+			for (String name : new String[]{"inventory", "pause", "Options"}) {
+				JsonObject args = new JsonObject();
+				args.addProperty("action", "open");
+				args.addProperty("name", name);
+				server.handle(toolCall(id++, "screen", args));
+				assertFalse(toolIsError(sink.next()));
+			}
+			JsonObject close = new JsonObject();
+			close.addProperty("action", "close");
+			server.handle(toolCall(id++, "screen", close));
+			assertFalse(toolIsError(sink.next()));
+			assertEquals(List.of("open_inventory", "open_pause_menu", "open_options", "close_screen"),
+					fake.calls.stream().map(FakeBridge.Call::action).toList());
+
+			JsonObject bad = new JsonObject();
+			bad.addProperty("action", "open");
+			bad.addProperty("name", "chest");
+			server.handle(toolCall(id, "screen", bad));
+			assertTrue(toolIsError(sink.next()));
+		}
+	}
+
+	@Test
+	void inventoryHotbarSelectsSlot() throws Exception {
+		try (FakeBridge fake = new FakeBridge()) {
+			fake.on("select_hotbar_slot", params -> FakeBridge.Reply.ok(params));
+			JsonObject args = new JsonObject();
+			args.addProperty("action", "hotbar");
+			args.addProperty("slot", 3);
+			server(fake.port()).handle(toolCall(1, "inventory", args));
+			assertFalse(toolIsError(sink.next()));
+			assertEquals(3, fake.calls.get(0).params().get("slot").getAsInt());
+		}
+	}
+
+	@Test
+	void optionsListsWithoutNameAndValue() throws Exception {
+		try (FakeBridge fake = new FakeBridge()) {
+			fake.on("list_options", params -> FakeBridge.Reply.ok(params));
+			JsonObject args = new JsonObject();
+			args.addProperty("filter", "fov");
+			server(fake.port()).handle(toolCall(1, "options", args));
+			assertFalse(toolIsError(sink.next()));
+			assertEquals("list_options", fake.calls.get(0).action());
+			assertEquals("fov", fake.calls.get(0).params().get("filter").getAsString());
 		}
 	}
 
@@ -861,7 +991,7 @@ class GravelMcpServerTest {
 			JsonObject args = new JsonObject();
 			args.addProperty("interactive_only", true);
 			args.addProperty("include_hidden", false);
-			server(fake.port()).handle(toolCall(1, "read_screen", args));
+			server(fake.port()).handle(toolCall(1, "screen", args));
 			assertFalse(toolIsError(sink.next()));
 			assertEquals(args, fake.calls.get(0).params());
 		}
@@ -878,7 +1008,28 @@ class GravelMcpServerTest {
 			args.addProperty("value", "90");
 			args.addProperty("fraction", 0.5);
 			args.addProperty("amount", 3);
-			server(fake.port()).handle(toolCall(1, "interact_widget", args));
+			server(fake.port()).handle(toolCall(1, "screen_input", args));
+			assertFalse(toolIsError(sink.next()));
+			assertEquals(args, fake.calls.get(0).params());
+		}
+	}
+
+	@Test
+	void mousePassesArguments() throws Exception {
+		try (FakeBridge fake = new FakeBridge()) {
+			fake.on("mouse", params -> FakeBridge.Reply.ok(params));
+			JsonObject args = new JsonObject();
+			args.addProperty("x", 120);
+			args.addProperty("y", 80.5);
+			args.addProperty("action", "drag");
+			args.addProperty("button", "right");
+			args.addProperty("to_x", 200);
+			args.addProperty("to_y", 90);
+			args.addProperty("steps", 5);
+			args.addProperty("amount", 2);
+			args.addProperty("image_width", 1280);
+			args.addProperty("modifiers", "shift");
+			server(fake.port()).handle(toolCall(1, "screen_input", args));
 			assertFalse(toolIsError(sink.next()));
 			assertEquals(args, fake.calls.get(0).params());
 		}

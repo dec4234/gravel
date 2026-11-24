@@ -25,6 +25,8 @@ public final class ScreenshotActions {
 		RenderTarget target = mc.gameRenderer.mainRenderTarget();
 		Screen screen = mc.gui.screen();
 		String screenName = screen == null ? null : screen.getClass().getSimpleName();
+		int guiWidth = mc.getWindow().getGuiScaledWidth();
+		int guiHeight = mc.getWindow().getGuiScaledHeight();
 		CompletableFuture<JsonObject> result = new CompletableFuture<>();
 		// The copy from the GPU is done later. The game gives the image to this callback when it is ready.
 		Screenshot.takeScreenshot(target, image -> {
@@ -36,6 +38,8 @@ public final class ScreenshotActions {
 					o.addProperty("width", img.getWidth());
 					o.addProperty("height", img.getHeight());
 					o.addProperty("screen", screenName);
+					o.addProperty("guiWidth", guiWidth);
+					o.addProperty("guiHeight", guiHeight);
 					o.addProperty("png", Base64.getEncoder().encodeToString(Files.readAllBytes(file)));
 					result.complete(o);
 				} finally {

@@ -23,7 +23,6 @@
 		]
 	},
 	"mixins": [
-		"gravel.mixins.json",
 		{
 			"config": "gravel.client.mixins.json",
 			"environment": "client"

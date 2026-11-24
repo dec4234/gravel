@@ -11,6 +11,7 @@ import net.dec4234.gravel.client.bridge.DebugScreenActions;
 import net.dec4234.gravel.client.bridge.InputActions;
 import net.dec4234.gravel.client.bridge.InventoryActions;
 import net.dec4234.gravel.client.bridge.InteractActions;
+import net.dec4234.gravel.client.bridge.MouseActions;
 import net.dec4234.gravel.client.bridge.MovementActions;
 import net.dec4234.gravel.client.bridge.OptionsActions;
 import net.dec4234.gravel.client.bridge.ReloadActions;
@@ -50,6 +51,7 @@ public class GravelClient implements ClientModInitializer {
 		ScreenshotActions.registerAll(ACTIONS);
 		InputActions.registerAll(ACTIONS);
 		WidgetActions.registerAll(ACTIONS);
+		MouseActions.registerAll(ACTIONS);
 		MovementActions.registerAll(ACTIONS);
 		InteractActions.registerAll(ACTIONS);
 		ReloadActions.registerAll(ACTIONS);

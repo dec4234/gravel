@@ -385,7 +385,7 @@ public final class MovementActions {
 		Screen screen = mc.gui.screen();
 		if (screen != null) {
 			throw new IllegalStateException("Screen " + screen.getClass().getSimpleName()
-					+ " is open, so the player can not move or act. Close it first with close_screen.");
+					+ " is open, so the player can not move or act. Close it first (screen with action close).");
 		}
 		Pathfinding.requireNotPathing();
 		return player;
