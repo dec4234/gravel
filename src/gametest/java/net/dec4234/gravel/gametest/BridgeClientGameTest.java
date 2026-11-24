@@ -62,7 +62,7 @@ public class BridgeClientGameTest implements FabricClientGameTest {
 		for (String name : new String[]{"status", "shutdown", "join_world", "open_chat", "send_chat", "read_chat",
 				"select_hotbar_slot", "open_inventory", "read_inventory", "click_slot", "move_item", "open_pause_menu",
 				"open_options", "close_screen", "list_options", "set_option", "scan_blocks", "list_entities", "list_players",
-				"debug_screen", "screenshot", "press_key", "enter_text", "read_screen", "interact_widget", "mouse"}) {
+				"debug_screen", "read_hud", "screenshot", "press_key", "enter_text", "read_screen", "interact_widget", "mouse"}) {
 			check(actions.contains(new com.google.gson.JsonPrimitive(name)), "action list has " + name);
 		}
 	}
@@ -350,6 +350,30 @@ public class BridgeClientGameTest implements FabricClientGameTest {
 		}
 		check(!debug.has("errors"), "debug_screen entries have no errors: " + debug.get("errors"));
 		check(debug.getAsJsonArray("renderToggles").size() > 0, "debug_screen lists render toggles");
+
+		command(context, "/title @s title {\"text\":\"Gravel title\"}");
+		command(context, "/scoreboard objectives add gravel_hud dummy \"Gravel Sidebar\"");
+		command(context, "/scoreboard objectives setdisplay sidebar gravel_hud");
+		command(context, "/scoreboard players set alpha gravel_hud 7");
+		command(context, "/bossbar add gravel:hud \"Gravel Boss\"");
+		command(context, "/bossbar set gravel:hud players @s");
+		context.waitTicks(5);
+		JsonObject hud = action(context, "read_hud", new JsonObject());
+		JsonObject title = hud.getAsJsonObject("title");
+		check(title.get("shown").getAsBoolean(), "read_hud title shows: " + hud);
+		checkEquals("Gravel title", string(title, "title"), "read_hud title text");
+		JsonObject sidebar = hud.getAsJsonObject("sidebar");
+		check(sidebar.get("shown").getAsBoolean(), "read_hud sidebar shows: " + hud);
+		checkEquals("Gravel Sidebar", string(sidebar, "title"), "read_hud sidebar title");
+		JsonObject line = sidebar.getAsJsonArray("lines").get(0).getAsJsonObject();
+		checkEquals("alpha", string(line, "text"), "read_hud sidebar line");
+		checkEquals(7, line.get("value").getAsInt(), "read_hud sidebar score");
+		JsonArray bars = hud.getAsJsonArray("bossBars");
+		checkEquals(1, bars.size(), "read_hud has one boss bar: " + hud);
+		checkEquals("Gravel Boss", string(bars.get(0).getAsJsonObject(), "name"), "read_hud boss bar name");
+		command(context, "/bossbar remove gravel:hud");
+		command(context, "/scoreboard objectives remove gravel_hud");
+		command(context, "/title @s clear");
 	}
 
 	/** Sends a command and waits for its feedback. */

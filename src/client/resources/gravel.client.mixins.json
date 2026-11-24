@@ -6,15 +6,18 @@
 		"AbstractContainerScreenInvoker",
 		"AbstractSliderButtonAccessor",
 		"AbstractWidgetAccessor",
+		"BossHealthOverlayAccessor",
 		"ConnectScreenAccessor",
 		"CreateWorldScreenInvoker",
 		"CreativeModeInventoryScreenInvoker",
 		"DebugScreenOverlayAccessor",
 		"DisconnectedScreenMixin",
+		"HudAccessor",
 		"MinecraftInvoker",
 		"MinecraftMixin",
 		"MouseHandlerAccessor",
 		"MusicManagerMixin",
+		"PlayerTabOverlayAccessor",
 		"ScreenAccessor"
 	],
 	"injectors": {

@@ -149,7 +149,8 @@ class GravelMcpServerTest {
 		});
 		assertEquals(List.of("launch_minecraft", "stop_minecraft", "minecraft_status", "join_world",
 				"join_server", "read_disconnects", "chat", "wait_for", "inventory", "screen", "options", "chunk_info",
-				"teleport", "scan_blocks", "list_entities", "list_players", "debug_screen", "screenshot", "press_key",
+				"teleport", "scan_blocks", "list_entities", "list_players", "debug_screen", "read_hud",
+				"screenshot", "press_key",
 				"screen_input", "look", "move", "jump", "attack", "use", "reload_resources", "reload_chunks", "path_to",
 				"path_status", "path_cancel", "mine", "follow", "attack_entity", "baritone_command", "baritone_settings",
 				"minecraft_launch_log", "list_minecraft_logs", "scan_minecraft_log"), names);
@@ -720,6 +721,23 @@ class GravelMcpServerTest {
 			assertEquals("zombie,skeleton", fake.calls.get(0).params().get("type").getAsString());
 			assertEquals("list_players", fake.calls.get(1).action());
 			assertEquals(0, fake.calls.get(1).params().size());
+		}
+	}
+
+	@Test
+	void readHudCallsItsAction() throws Exception {
+		try (FakeBridge fake = new FakeBridge()) {
+			fake.on("read_hud", params -> {
+				JsonObject o = new JsonObject();
+				o.addProperty("hudHidden", false);
+				return FakeBridge.Reply.ok(o);
+			});
+			server(fake.port()).handle(toolCall(1, "read_hud", null));
+			JsonObject reply = sink.next();
+			assertFalse(toolIsError(reply));
+			assertEquals("read_hud", fake.calls.get(0).action());
+			assertEquals(0, fake.calls.get(0).params().size());
+			assertFalse(JsonParser.parseString(toolText(reply)).getAsJsonObject().get("hudHidden").getAsBoolean());
 		}
 	}
 

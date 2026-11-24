@@ -486,6 +486,15 @@ public final class GravelMcpServer {
 						.build(),
 				args -> PRETTY.toJson(bridge.action("debug_screen", copy(args, "only_shown")))));
 
+		add(new Tool("read_hud",
+				"Read the text that the HUD shows now: title and subtitle, action bar, boss bars (name, progress, "
+						+ "color, style), the scoreboard sidebar (title and lines, in the order the player sees them), "
+						+ "and the tab list header and footer. Many servers and mods show data only in these places. "
+						+ "The title and action bar keep their last text after they fade, so 'shown' tells if they "
+						+ "show now.",
+				Schema.object().build(),
+				args -> PRETTY.toJson(bridge.action("read_hud", new JsonObject()))));
+
 		add(Tool.withContent("screenshot",
 				"Take a screenshot of the game view: the world, the HUD and any open screen or menu, as the player "
 						+ "sees it. Returns the image. Use this to see what a screen looks like or where things are.",
