@@ -204,6 +204,42 @@ class GravelMcpServerTest {
 	}
 
 	@Test
+	void statusWithModsPassesParamsAndMovesModsToTop() throws Exception {
+		try (FakeBridge fake = new FakeBridge()) {
+			JsonObject[] seen = new JsonObject[1];
+			fake.on("status", params -> {
+				seen[0] = params;
+				JsonObject o = new JsonObject();
+				o.addProperty("inWorld", false);
+				JsonObject mods = new JsonObject();
+				mods.addProperty("total", 3);
+				o.add("mods", mods);
+				return FakeBridge.Reply.ok(o);
+			});
+			JsonObject args = new JsonObject();
+			args.addProperty("mods", "full");
+			args.addProperty("mod", "gravel");
+			server(fake.port()).handle(toolCall(1, "minecraft_status", args));
+			JsonObject status = JsonParser.parseString(toolText(sink.next())).getAsJsonObject();
+			assertEquals("full", seen[0].get("mods").getAsString());
+			assertEquals("gravel", seen[0].get("mod").getAsString());
+			assertEquals(3, status.getAsJsonObject("mods").get("total").getAsInt());
+			assertFalse(status.getAsJsonObject("game").has("mods"));
+			assertTrue(status.has("mixinProblems"));
+		}
+	}
+
+	@Test
+	void statusWithModsWhenBridgeIsDownStillGivesMixinProblems() throws Exception {
+		JsonObject args = new JsonObject();
+		args.addProperty("mods", "summary");
+		server(FakeBridge.unusedPort()).handle(toolCall(1, "minecraft_status", args));
+		JsonObject status = JsonParser.parseString(toolText(sink.next())).getAsJsonObject();
+		assertTrue(status.get("mods").getAsString().contains("not running"));
+		assertTrue(status.has("mixinProblems"));
+	}
+
+	@Test
 	void bridgeFailureBecomesToolError() throws Exception {
 		server(FakeBridge.unusedPort()).handle(toolCall(1, "chat", null));
 		JsonObject reply = sink.next();

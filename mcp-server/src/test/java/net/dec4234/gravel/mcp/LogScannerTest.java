@@ -83,6 +83,32 @@ class LogScannerTest {
 	}
 
 	@Test
+	void mixinProblemsFindsApplyFailuresAndMissingTargets() throws Exception {
+		Files.writeString(run.resolve("logs/latest.log"), String.join("\n",
+				"[10:00:00] [main/INFO] (mixin) Mixin apply for mod gravel was fine in this INFO line",
+				"[10:00:01] [main/WARN] (mixin) @Mixin target net.minecraft.Foo was not found gravel.mixins.json:FooMixin",
+				"[10:00:02] [Render thread/ERROR] (Minecraft) Unreported exception thrown!",
+				"org.spongepowered.asm.mixin.transformer.throwables.MixinTransformerError: An unexpected critical error",
+				"\tat a.b.C.run(C.java:1)",
+				"Caused by: org.spongepowered.asm.mixin.injection.throwables.InvalidInjectionException: bad",
+				"[10:00:03] [Render thread/ERROR] (Minecraft) Other error",
+				""));
+		var o = scanner.mixinProblems("latest");
+		assertEquals(2, o.get("count").getAsInt(), o.toString());
+		var first = o.getAsJsonArray("problems").get(0).getAsJsonObject();
+		assertEquals(2, first.get("line").getAsInt());
+		assertEquals("WARN", first.get("level").getAsString());
+		var second = o.getAsJsonArray("problems").get(1).getAsJsonObject();
+		assertEquals(3, second.getAsJsonArray("text").size(), second.toString());
+	}
+
+	@Test
+	void mixinProblemsWithoutLogGivesError() throws Exception {
+		Files.delete(run.resolve("logs/latest.log"));
+		assertTrue(scanner.mixinProblems("latest").has("error"));
+	}
+
+	@Test
 	void patternSearchesStackTraces() throws Exception {
 		String out = scanner.scan("latest", withPattern("IOEXCEPTION", false));
 		assertTrue(out.contains("matches: 1"), out);

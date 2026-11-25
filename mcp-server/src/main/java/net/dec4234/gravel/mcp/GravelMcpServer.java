@@ -103,15 +103,37 @@ public final class GravelMcpServer {
 
 		add(new Tool("minecraft_status",
 				"Report whether Minecraft is running, and if so the in-game state (in a world, current screen, "
-						+ "player position and health).",
-				Schema.object().build(),
+						+ "player position and health). Set mods to also list the mods that Fabric Loader loaded "
+						+ "(id, name, version, type, jar paths or the mod they are nested in) and the mixin problems "
+						+ "in latest.log (mixins that could not load or apply, missing targets). The mixin problems "
+						+ "show also when the game is stopped or crashed.",
+				Schema.object()
+						.prop("mods", "string", "summary (id, version, jar for each mod) or full (also dependencies "
+								+ "with the found version, entrypoints and mixin configs). Optional.")
+						.prop("mod", "string", "With mods: only mods whose id or name has this text. Optional.")
+						.build(),
 				args -> {
+					String mods = Schema.optString(args, "mods");
 					JsonObject result = new JsonObject();
 					result.addProperty("launcherProcessAlive", launcher.isProcessAlive());
 					boolean up = bridge.isUp();
 					result.addProperty("bridgeReachable", up);
 					if (up) {
-						result.add("game", bridge.action("status", null));
+						JsonObject params = null;
+						if (mods != null) {
+							params = copy(args, "mods", "mod");
+						}
+						JsonObject game = bridge.action("status", params);
+						JsonElement modList = game.remove("mods");
+						result.add("game", game);
+						if (modList != null) {
+							result.add("mods", modList);
+						}
+					} else if (mods != null) {
+						result.addProperty("mods", "Minecraft is not running. Only the mixin problems from the log show.");
+					}
+					if (mods != null) {
+						result.add("mixinProblems", logs.mixinProblems("latest"));
 					}
 					return PRETTY.toJson(result);
 				}));

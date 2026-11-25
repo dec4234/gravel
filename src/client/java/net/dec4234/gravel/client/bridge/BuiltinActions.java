@@ -41,6 +41,14 @@ public final class BuiltinActions {
 			p.add("heldItem", InventoryActions.stackJson(player.getInventory().getSelectedItem()));
 			o.add("player", p);
 		}
+		if (params != null && params.has("mods")) {
+			String mode = params.get("mods").getAsString();
+			if (!mode.equals("summary") && !mode.equals("full")) {
+				throw new IllegalArgumentException("mods must be summary or full, not '" + mode + "'");
+			}
+			String filter = params.has("mod") ? params.get("mod").getAsString() : null;
+			o.add("mods", ModInfo.json(mode.equals("full"), filter));
+		}
 		return o;
 	}
 

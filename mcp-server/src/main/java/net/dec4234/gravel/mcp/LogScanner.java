@@ -379,6 +379,63 @@ final class LogScanner {
 		return s.length() > 200 ? s.substring(0, 200) + "..." : s;
 	}
 
+	// ---------------------------------------------------------------- mixin problems
+
+	/** Text that Mixin writes when a mixin cannot load or apply. */
+	private static final Pattern MIXIN_PROBLEM = Pattern.compile(
+			"Mixin apply (?:for mod \\S+ )?failed|Mixin prepare (?:for mod \\S+ )?failed|MixinApplyError"
+					+ "|MixinTransformerError|MixinPrepareError|InvalidMixinException|InvalidInjectionException"
+					+ "|InjectionError|Critical injection failure|@Mixin target \\S+ was not found"
+					+ "|Mixin config \\S+ (?:could not|failed)|ClassMetadataNotFoundException",
+			Pattern.CASE_INSENSITIVE);
+
+	/**
+	 * The WARN and higher entries of a log that are about mixins that could not load or apply, oldest first.
+	 * Each has the line number, level, logger, and the first lines of the entry. Max 30 entries.
+	 */
+	com.google.gson.JsonObject mixinProblems(String source) throws IOException {
+		com.google.gson.JsonObject o = new com.google.gson.JsonObject();
+		Path file;
+		try {
+			file = resolve(source);
+		} catch (IllegalArgumentException e) {
+			o.addProperty("error", e.getMessage());
+			return o;
+		}
+		o.addProperty("file", file.toString());
+		com.google.gson.JsonArray list = new com.google.gson.JsonArray();
+		int count = 0;
+		for (Entry e : parse(readLines(file))) {
+			boolean problemLevel = e.level() == null || e.levelRank() >= LEVELS.indexOf("WARN");
+			if (!problemLevel || !MIXIN_PROBLEM.matcher(e.text()).find()) {
+				continue;
+			}
+			count++;
+			if (list.size() >= 30) {
+				continue;
+			}
+			com.google.gson.JsonObject p = new com.google.gson.JsonObject();
+			p.addProperty("line", e.line());
+			p.addProperty("level", e.level());
+			p.addProperty("logger", e.logger());
+			com.google.gson.JsonArray lines = new com.google.gson.JsonArray();
+			// The header and the exception lines tell the cause; skip the "at" lines of the stack trace.
+			for (String line : e.lines()) {
+				if (lines.size() >= 8) {
+					break;
+				}
+				if (!line.startsWith("\tat ") && !line.strip().startsWith("... ")) {
+					lines.add(line.length() > 400 ? line.substring(0, 400) + "..." : line);
+				}
+			}
+			p.add("text", lines);
+			list.add(p);
+		}
+		o.addProperty("count", count);
+		o.add("problems", list);
+		return o;
+	}
+
 	// ---------------------------------------------------------------- helpers
 
 	private static java.util.Optional<Pattern> compile(Query q) {

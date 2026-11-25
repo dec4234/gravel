@@ -74,6 +74,22 @@ public class BridgeClientGameTest implements FabricClientGameTest {
 		check(!status.get("inWorld").getAsBoolean(), "not in a world on the title screen");
 		checkEquals("TitleScreen", string(status, "screen"), "screen");
 		check(!status.has("player"), "no player data outside a world");
+		check(!status.has("mods"), "no mods without the mods param");
+
+		JsonObject params = new JsonObject();
+		params.addProperty("mods", "full");
+		params.addProperty("mod", "gravel");
+		JsonObject mods = action(context, "status", params).getAsJsonObject("mods");
+		JsonObject gravel = null;
+		for (var e : mods.getAsJsonArray("list")) {
+			if ("gravel".equals(e.getAsJsonObject().get("id").getAsString())) {
+				gravel = e.getAsJsonObject();
+			}
+		}
+		check(gravel != null, "mods lists gravel: " + mods);
+		check(gravel.getAsJsonObject("entrypoints").has("client"), "gravel has a client entrypoint: " + gravel);
+		check(gravel.getAsJsonArray("mixinConfigs").size() > 0, "gravel has mixin configs: " + gravel);
+		check(gravel.getAsJsonArray("dependencies").size() > 0, "gravel has dependencies: " + gravel);
 	}
 
 	private void chatActionsNeedAWorld(ClientGameTestContext context) {
