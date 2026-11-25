@@ -15,6 +15,7 @@ import net.dec4234.gravel.client.bridge.InteractActions;
 import net.dec4234.gravel.client.bridge.MouseActions;
 import net.dec4234.gravel.client.bridge.MovementActions;
 import net.dec4234.gravel.client.bridge.OptionsActions;
+import net.dec4234.gravel.client.bridge.RegistryActions;
 import net.dec4234.gravel.client.bridge.ReloadActions;
 import net.dec4234.gravel.client.bridge.Pathfinding;
 import net.dec4234.gravel.client.bridge.ScreenActions;
@@ -57,6 +58,7 @@ public class GravelClient implements ClientModInitializer {
 		MovementActions.registerAll(ACTIONS);
 		InteractActions.registerAll(ACTIONS);
 		ReloadActions.registerAll(ACTIONS);
+		RegistryActions.registerAll(ACTIONS);
 		Pathfinding.registerAll(ACTIONS);
 		WaitActions.registerAll(ACTIONS);
 		ChatLog.register();

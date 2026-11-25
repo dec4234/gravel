@@ -48,6 +48,7 @@ public class BridgeClientGameTest implements FabricClientGameTest {
 		useMenuWidgets(context);
 		changeOptions(context);
 		seeSurroundings(context);
+		lookUpRegistries(context);
 		recreateWorld(context);
 		leaveWorld(context);
 	}
@@ -62,7 +63,7 @@ public class BridgeClientGameTest implements FabricClientGameTest {
 		for (String name : new String[]{"status", "shutdown", "join_world", "open_chat", "send_chat", "read_chat",
 				"select_hotbar_slot", "open_inventory", "read_inventory", "click_slot", "move_item", "open_pause_menu",
 				"open_options", "close_screen", "list_options", "set_option", "scan_blocks", "list_entities", "list_players",
-				"debug_screen", "read_hud", "screenshot", "press_key", "enter_text", "read_screen", "interact_widget", "mouse"}) {
+				"debug_screen", "read_hud", "lookup_registry", "screenshot", "press_key", "enter_text", "read_screen", "interact_widget", "mouse"}) {
 			check(actions.contains(new com.google.gson.JsonPrimitive(name)), "action list has " + name);
 		}
 	}
@@ -297,6 +298,34 @@ public class BridgeClientGameTest implements FabricClientGameTest {
 			}
 		}
 		return 0;
+	}
+
+	private void lookUpRegistries(ClientGameTestContext context) {
+		JsonObject items = new JsonObject();
+		items.addProperty("registry", "item");
+		items.addProperty("filter", "diamond");
+		JsonObject found = action(context, "lookup_registry", items);
+		JsonArray entries = found.getAsJsonArray("entries");
+		check(entries.size() > 1, "several items match diamond: " + found);
+		checkEquals("minecraft:diamond", string(entries.get(0).getAsJsonObject(), "id"), "exact match comes first");
+		checkEquals("Diamond", string(entries.get(0).getAsJsonObject(), "name"), "item display name");
+
+		JsonObject biomes = new JsonObject();
+		biomes.addProperty("registry", "biome");
+		biomes.addProperty("filter", "plains");
+		JsonObject biome = action(context, "lookup_registry", biomes);
+		checkEquals("minecraft:plains", string(biome.getAsJsonArray("entries").get(0).getAsJsonObject(), "id"),
+				"biome registry from the world: " + biome);
+
+		JsonObject logs = new JsonObject();
+		logs.addProperty("registry", "block");
+		logs.addProperty("tag", "#minecraft:logs");
+		logs.addProperty("filter", "oak");
+		JsonObject inTag = action(context, "lookup_registry", logs);
+		check(inTag.get("matched").getAsInt() > 0, "oak logs are in #minecraft:logs: " + inTag);
+
+		JsonObject list = action(context, "lookup_registry", new JsonObject());
+		check(list.getAsJsonArray("registries").size() > 50, "registry list has many registries");
 	}
 
 	private void seeSurroundings(ClientGameTestContext context) {

@@ -495,6 +495,27 @@ public final class GravelMcpServer {
 				Schema.object().build(),
 				args -> PRETTY.toJson(bridge.action("read_hud", new JsonObject()))));
 
+		add(new Tool("lookup_registry",
+				"Find the ids in a game registry that match a filter, so /give, /summon, /effect, /enchant and "
+						+ "/locate commands use correct ids and do not guess. Registries: item, block, entity, biome, "
+						+ "enchantment, effect, potion, sound, particle, structure and all others (call with no "
+						+ "registry to list them with their sizes). Biomes, enchantments and other data-driven "
+						+ "registries need a world. Each entry has its id and, for items, blocks and entities, the "
+						+ "name the player sees. Exact matches come first.",
+				Schema.object()
+						.prop("registry", "string", "The registry: item, block, entity, biome, enchantment, effect, "
+								+ "potion, sound, particle, structure, or any registry id like worldgen/biome. Omit to "
+								+ "list the registries.")
+						.prop("filter", "string", "Only ids or names that contain one of these comma-separated terms, "
+								+ "for example \"diamond\" or \"zombie,skeleton\". Not case sensitive. Optional.")
+						.prop("tag", "string", "Only entries in this tag, for example \"minecraft:logs\" or "
+								+ "\"#c:ores\". Optional.")
+						.prop("include_tags", "boolean", "Add the tags of each entry. Default false.")
+						.prop("limit", "integer", "Most entries to return, 1-2000. Default 100.")
+						.build(),
+				args -> PRETTY.toJson(bridge.action("lookup_registry",
+						copy(args, "registry", "filter", "tag", "include_tags", "limit")))));
+
 		add(Tool.withContent("screenshot",
 				"Take a screenshot of the game view: the world, the HUD and any open screen or menu, as the player "
 						+ "sees it. Returns the image. Use this to see what a screen looks like or where things are.",

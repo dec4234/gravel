@@ -150,7 +150,7 @@ class GravelMcpServerTest {
 		assertEquals(List.of("launch_minecraft", "stop_minecraft", "minecraft_status", "join_world",
 				"join_server", "read_disconnects", "chat", "wait_for", "inventory", "screen", "options", "chunk_info",
 				"teleport", "scan_blocks", "list_entities", "list_players", "debug_screen", "read_hud",
-				"screenshot", "press_key",
+				"lookup_registry", "screenshot", "press_key",
 				"screen_input", "look", "move", "jump", "attack", "use", "reload_resources", "reload_chunks", "path_to",
 				"path_status", "path_cancel", "mine", "follow", "attack_entity", "baritone_command", "baritone_settings",
 				"minecraft_launch_log", "list_minecraft_logs", "scan_minecraft_log"), names);
@@ -673,6 +673,31 @@ class GravelMcpServerTest {
 			assertFalse(toolIsError(reply), toolText(reply));
 			assertEquals(500, fake.calls.getFirst().params().get("wait_ms").getAsInt());
 			assertTrue(JsonParser.parseString(toolText(reply)).getAsJsonObject().get("allBuilt").getAsBoolean());
+		}
+	}
+
+	@Test
+	void lookupRegistryPassesOnlyGivenArguments() throws Exception {
+		try (FakeBridge fake = new FakeBridge()) {
+			fake.on("lookup_registry", params -> {
+				JsonObject o = new JsonObject();
+				o.addProperty("matched", 2);
+				return FakeBridge.Reply.ok(o);
+			});
+			JsonObject args = new JsonObject();
+			args.addProperty("registry", "item");
+			args.addProperty("filter", "diamond");
+			args.addProperty("not_a_parameter", 1);
+			server(fake.port()).handle(toolCall(1, "lookup_registry", args));
+			JsonObject reply = sink.next();
+			assertFalse(toolIsError(reply), toolText(reply));
+
+			JsonObject sent = fake.calls.get(0).params();
+			assertEquals("item", sent.get("registry").getAsString());
+			assertEquals("diamond", sent.get("filter").getAsString());
+			assertFalse(sent.has("limit"));
+			assertFalse(sent.has("not_a_parameter"));
+			assertEquals(2, JsonParser.parseString(toolText(reply)).getAsJsonObject().get("matched").getAsInt());
 		}
 	}
 
