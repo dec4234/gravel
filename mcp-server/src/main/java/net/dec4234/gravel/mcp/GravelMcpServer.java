@@ -655,32 +655,74 @@ public final class GravelMcpServer {
 
 		add(Tool.withContent("screenshot",
 				"Take a screenshot of the game view: the world, the HUD and any open screen or menu, as the player "
-						+ "sees it. Returns the image. Use this to see what a screen looks like or where things are.",
+						+ "sees it. Returns the image. Use this to see what a screen looks like or where things are. "
+						+ "For screenshot tests of rendering mods: hide_hud removes the HUD (as F1 does), save_to keeps "
+						+ "the full size PNG as a baseline, and compare_to compares the new screenshot with a baseline. "
+						+ "A compare gives a difference score, the changed pixels and an image of the differences.",
 				Schema.object()
 						.prop("max_width", "integer", "Scale the image down to this width or less. Default "
 								+ Screenshots.DEFAULT_MAX_WIDTH + ". Use 0 for the full size.")
 						.prop("format", "string", "png (default, exact) or jpeg (smaller).")
+						.prop("hide_hud", "boolean", "Hide the HUD (hotbar, crosshair, chat) for the screenshot, then "
+								+ "show it again. An open screen is still shown. Default false.")
+						.prop("save_to", "string", "Save the full size PNG to this file (relative paths are from the "
+								+ "project folder). Use it to make a baseline for compare_to.")
+						.prop("compare_to", "string", "A baseline image file to compare with (relative paths are from "
+								+ "the project folder). If the size is not the same, the baseline is scaled to the "
+								+ "screenshot size.")
+						.prop("tolerance", "integer", "For compare_to: the largest difference in one color channel "
+								+ "(0-255) that is not a changed pixel. Default " + Screenshots.DEFAULT_TOLERANCE
+								+ ". Use 0 for an exact compare.")
 						.build(),
 				args -> {
-					JsonObject shot = bridge.action("screenshot", new JsonObject());
+					// Read the baseline first, so that a bad path fails before the HUD is hidden.
+					String compareTo = Schema.optString(args, "compare_to");
+					java.awt.image.BufferedImage baseline = compareTo == null || compareTo.isBlank() ? null
+							: Screenshots.read(projectDir.resolve(compareTo.trim()));
+					int tolerance = Schema.optInt(args, "tolerance", Screenshots.DEFAULT_TOLERANCE);
+					int maxWidth = Schema.optInt(args, "max_width", Screenshots.DEFAULT_MAX_WIDTH);
+					String format = Schema.optString(args, "format");
+
+					JsonObject params = new JsonObject();
+					if (Schema.optBool(args, "hide_hud", false)) {
+						params.addProperty("hide_hud", true);
+					}
+					JsonObject shot = bridge.action("screenshot", params);
 					int width = shot.get("width").getAsInt();
 					int height = shot.get("height").getAsInt();
-					Screenshots.Image image = Screenshots.prepare(shot.get("png").getAsString(),
-							Schema.optInt(args, "max_width", Screenshots.DEFAULT_MAX_WIDTH), Schema.optString(args, "format"));
+					String png = shot.get("png").getAsString();
+					Screenshots.Image image = Screenshots.prepare(png, maxWidth, format);
 					String screen = optString(shot, "screen");
-					String info = "Game view " + width + "x" + height
+					StringBuilder info = new StringBuilder("Game view " + width + "x" + height
 							+ (image.width() != width ? ", scaled to " + image.width() + "x" + image.height() : "")
 							+ ". Screen: " + (screen == null ? "none (in game)" : screen) + "."
+							+ (shot.has("hudHidden") && shot.get("hudHidden").getAsBoolean() ? " HUD hidden." : "")
 							+ (shot.has("guiWidth") ? " GUI size " + shot.get("guiWidth").getAsInt() + "x"
 									+ shot.get("guiHeight").getAsInt() + ". To click a point of this image, call "
-									+ "screen_input with x, y in image pixels and image_width " + image.width() + "." : "");
+									+ "screen_input with x, y in image pixels and image_width " + image.width() + "." : ""));
+
+					String saveTo = Schema.optString(args, "save_to");
+					if (saveTo != null && !saveTo.isBlank()) {
+						Path file = projectDir.resolve(saveTo.trim()).toAbsolutePath().normalize();
+						Screenshots.save(png, file);
+						info.append(" Saved to ").append(file).append('.');
+					}
+
 					JsonArray content = new JsonArray();
-					content.add(textContent(info));
-					JsonObject img = new JsonObject();
-					img.addProperty("type", "image");
-					img.addProperty("data", image.base64());
-					img.addProperty("mimeType", image.mimeType());
-					content.add(img);
+					Screenshots.Image diffImage = null;
+					if (baseline != null) {
+						Screenshots.Comparison c = Screenshots.compare(Screenshots.decode(png), baseline, tolerance);
+						info.append(compareText(c, tolerance));
+						if (c.changedPixels() > 0) {
+							diffImage = Screenshots.encode(c.diff(), maxWidth, format);
+						}
+					}
+					content.add(textContent(info.toString()));
+					content.add(imageContent(image));
+					if (diffImage != null) {
+						content.add(textContent("Differences (red = changed, brighter red = bigger change):"));
+						content.add(imageContent(diffImage));
+					}
 					return content;
 				}));
 
@@ -1465,6 +1507,35 @@ public final class GravelMcpServer {
 		c.addProperty("type", "text");
 		c.addProperty("text", text);
 		return c;
+	}
+
+	static JsonObject imageContent(Screenshots.Image image) {
+		JsonObject c = new JsonObject();
+		c.addProperty("type", "image");
+		c.addProperty("data", image.base64());
+		c.addProperty("mimeType", image.mimeType());
+		return c;
+	}
+
+	/** The text part of a screenshot compare. */
+	static String compareText(Screenshots.Comparison c, int tolerance) {
+		StringBuilder s = new StringBuilder("\nCompare: difference score ")
+				.append(String.format(Locale.ROOT, "%.3f", c.score()))
+				.append("% (0 = same). Changed pixels: ").append(c.changedPixels()).append(" of ")
+				.append(c.totalPixels()).append(String.format(Locale.ROOT, " (%.3f%%)", c.changedPercent()))
+				.append(" with tolerance ").append(tolerance).append(". Largest channel difference: ")
+				.append(c.maxDifference()).append('.');
+		if (c.changedPixels() > 0) {
+			s.append(" Changed area: x ").append(c.minX()).append('-').append(c.maxX())
+					.append(", y ").append(c.minY()).append('-').append(c.maxY()).append(" (full size pixels).");
+		} else {
+			s.append(" Result: same as the baseline.");
+		}
+		if (c.baselineScaled()) {
+			s.append(" The baseline was ").append(c.baselineWidth()).append('x').append(c.baselineHeight())
+					.append(" and was scaled to the screenshot size, so the score is less exact.");
+		}
+		return s.toString();
 	}
 
 	/** A tool that answers with text. */

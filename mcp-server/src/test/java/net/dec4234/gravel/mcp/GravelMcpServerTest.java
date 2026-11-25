@@ -1044,6 +1044,86 @@ class GravelMcpServerTest {
 	}
 
 	@Test
+	void screenshotPassesHideHud() throws Exception {
+		try (FakeBridge fake = screenshotBridge(10, 10, null)) {
+			JsonObject args = new JsonObject();
+			args.addProperty("hide_hud", true);
+			server(fake.port()).handle(toolCall(1, "screenshot", args));
+			assertFalse(toolIsError(sink.next()));
+			assertTrue(fake.calls.get(0).params().get("hide_hud").getAsBoolean());
+
+			server(fake.port()).handle(toolCall(2, "screenshot", null));
+			assertFalse(toolIsError(sink.next()));
+			assertFalse(fake.calls.get(1).params().has("hide_hud"));
+		}
+	}
+
+	@Test
+	void screenshotSavesAndMatchesBaseline() throws Exception {
+		try (FakeBridge fake = screenshotBridge(40, 20, null)) {
+			JsonObject save = new JsonObject();
+			save.addProperty("save_to", "baselines/menu.png");
+			server(fake.port()).handle(toolCall(1, "screenshot", save));
+			JsonObject reply = sink.next();
+			assertFalse(toolIsError(reply), toolText(reply));
+			Path file = project.resolve("baselines/menu.png");
+			assertEquals(40, javax.imageio.ImageIO.read(file.toFile()).getWidth());
+
+			JsonObject compare = new JsonObject();
+			compare.addProperty("compare_to", "baselines/menu.png");
+			server(fake.port()).handle(toolCall(2, "screenshot", compare));
+			reply = sink.next();
+			assertFalse(toolIsError(reply), toolText(reply));
+			assertTrue(toolText(reply).contains("difference score 0.000%"), toolText(reply));
+			assertTrue(toolText(reply).contains("same as the baseline"), toolText(reply));
+			// No diff image when nothing changed: text and screenshot only.
+			assertEquals(2, reply.getAsJsonObject("result").getAsJsonArray("content").size());
+		}
+	}
+
+	@Test
+	void screenshotCompareShowsDifferences() throws Exception {
+		java.awt.image.BufferedImage base = new java.awt.image.BufferedImage(40, 20,
+				java.awt.image.BufferedImage.TYPE_INT_RGB);
+		for (int y = 5; y < 10; y++) {
+			for (int x = 10; x < 20; x++) {
+				base.setRGB(x, y, 0xFFFFFF);
+			}
+		}
+		javax.imageio.ImageIO.write(base, "png", project.resolve("base.png").toFile());
+		try (FakeBridge fake = screenshotBridge(40, 20, null)) {
+			JsonObject args = new JsonObject();
+			args.addProperty("compare_to", "base.png");
+			server(fake.port()).handle(toolCall(1, "screenshot", args));
+			JsonObject reply = sink.next();
+			assertFalse(toolIsError(reply), toolText(reply));
+			String text = toolText(reply);
+			// The screenshot has one red pixel at 0,0. The baseline has a white box at 10-19, 5-9.
+			assertTrue(text.contains("Changed pixels: 51 of 800"), text);
+			assertTrue(text.contains("x 0-19, y 0-9"), text);
+			JsonArray content = reply.getAsJsonObject("result").getAsJsonArray("content");
+			assertEquals(4, content.size());
+			java.awt.image.BufferedImage diff = image(content.get(3).getAsJsonObject());
+			assertEquals(40, diff.getWidth());
+			assertTrue(((diff.getRGB(12, 6) >> 16) & 0xFF) > 200, "changed pixel is bright red");
+			assertEquals(0, diff.getRGB(30, 15) & 0xFFFFFF, "unchanged black pixel stays dark");
+		}
+	}
+
+	@Test
+	void screenshotCompareMissingBaselineIsError() throws Exception {
+		try (FakeBridge fake = screenshotBridge(10, 10, null)) {
+			JsonObject args = new JsonObject();
+			args.addProperty("compare_to", "nope.png");
+			server(fake.port()).handle(toolCall(1, "screenshot", args));
+			JsonObject reply = sink.next();
+			assertTrue(toolIsError(reply));
+			assertTrue(toolText(reply).contains("save_to"), toolText(reply));
+			assertTrue(fake.calls.isEmpty(), "no screenshot is taken when the baseline is missing");
+		}
+	}
+
+	@Test
 	void pressKeyPassesArguments() throws Exception {
 		try (FakeBridge fake = new FakeBridge()) {
 			fake.on("press_key", params -> FakeBridge.Reply.ok(params));
