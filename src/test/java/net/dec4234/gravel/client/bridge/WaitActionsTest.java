@@ -39,10 +39,10 @@ class WaitActionsTest {
 
 	@Test
 	void parseNeedsTicksOrCondition() {
-		assertThrows(IllegalArgumentException.class, () -> WaitActions.Conditions.parse(new JsonObject(), 0));
+		assertThrows(IllegalArgumentException.class, () -> WaitActions.Conditions.parse(new JsonObject(), 0, 0));
 		JsonObject ticks = new JsonObject();
 		ticks.addProperty("ticks", 20);
-		WaitActions.Conditions c = WaitActions.Conditions.parse(ticks, 0);
+		WaitActions.Conditions c = WaitActions.Conditions.parse(ticks, 0, 0);
 		assertFalse(c.hasCondition());
 		// A ticks-only wait gets the longest time limit, so the time limit does not end it early.
 		assertEquals(WaitActions.MAX_TIMEOUT_MS, c.timeoutMs());
@@ -52,11 +52,42 @@ class WaitActionsTest {
 	void parseDefaultsSinceIdToLatestChatLine() {
 		JsonObject params = new JsonObject();
 		params.addProperty("chat", "hi");
-		WaitActions.Conditions c = WaitActions.Conditions.parse(params, 17);
+		WaitActions.Conditions c = WaitActions.Conditions.parse(params, 17, 0);
 		assertEquals(17, c.sinceId());
 		assertEquals(WaitActions.DEFAULT_TIMEOUT_MS, c.timeoutMs());
 		params.addProperty("since_id", 3);
-		assertEquals(3, WaitActions.Conditions.parse(params, 17).sinceId());
+		assertEquals(3, WaitActions.Conditions.parse(params, 17, 0).sinceId());
+	}
+
+	@Test
+	void parsePacketDefaultsToReceivedPacketsAfterTheLatestId() {
+		JsonObject params = new JsonObject();
+		params.addProperty("packet", "mymod:sync");
+		WaitActions.Conditions c = WaitActions.Conditions.parse(params, 0, 9);
+		assertTrue(c.hasCondition());
+		assertTrue(c.hasPacket());
+		assertEquals(9, c.packetSinceId());
+		assertTrue(c.packet().test("in", "mymod:sync", true));
+		assertFalse(c.packet().test("out", "mymod:sync", true));
+		assertFalse(c.packet().test("in", "mymod:other", true));
+
+		params.addProperty("packet_direction", "any");
+		params.addProperty("packet_since_id", 2);
+		c = WaitActions.Conditions.parse(params, 0, 9);
+		assertEquals(2, c.packetSinceId());
+		assertTrue(c.packet().test("out", "mymod:sync", true));
+
+		params.addProperty("packet_direction", "sideways");
+		assertThrows(IllegalArgumentException.class, () -> WaitActions.Conditions.parse(params, 0, 9));
+	}
+
+	@Test
+	void parseRejectsBadPacketRegexWithItsName() {
+		JsonObject params = new JsonObject();
+		params.addProperty("packet", "(");
+		params.addProperty("packet_regex", true);
+		var e = assertThrows(IllegalArgumentException.class, () -> WaitActions.Conditions.parse(params, 0, 0));
+		assertTrue(e.getMessage().startsWith("packet "), e.getMessage());
 	}
 
 	@Test
@@ -66,7 +97,7 @@ class WaitActionsTest {
 			JsonObject params = new JsonObject();
 			params.addProperty("in_world", true);
 			params.addProperty(bad[0], Double.parseDouble(bad[1]));
-			assertThrows(IllegalArgumentException.class, () -> WaitActions.Conditions.parse(params, 0), bad[0]);
+			assertThrows(IllegalArgumentException.class, () -> WaitActions.Conditions.parse(params, 0, 0), bad[0]);
 		}
 	}
 

@@ -17,6 +17,8 @@
 		"MinecraftMixin",
 		"MouseHandlerAccessor",
 		"MusicManagerMixin",
+		"PacketDecoderMixin",
+		"PacketEncoderMixin",
 		"PlayerTabOverlayAccessor",
 		"ScreenAccessor"
 	],

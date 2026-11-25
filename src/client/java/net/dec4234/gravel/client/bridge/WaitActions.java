@@ -15,8 +15,8 @@ import java.util.regex.Pattern;
 import java.util.regex.PatternSyntaxException;
 
 /**
- * wait_for: waits for a number of client ticks, or until conditions are true (a chat line matches, a screen is
- * open, the player is in a world, the player is near a position). The checks run at the end of each client tick.
+ * wait_for: waits for a number of client ticks, or until conditions are true (a chat line matches, a packet on a
+ * channel arrives, a screen is open, the player is in a world, the player is near a position). The checks run at the end of each client tick.
  */
 public final class WaitActions {
 	/** The bridge stops each action after 30 s, so the wait and the settle time must end before that. */
@@ -50,7 +50,7 @@ public final class WaitActions {
 	}
 
 	private static CompletableFuture<JsonObject> waitFor(Minecraft mc, JsonObject params) {
-		Conditions c = Conditions.parse(params, ChatLog.latestId());
+		Conditions c = Conditions.parse(params, ChatLog.latestId(), PacketLog.latestId());
 		Waiter w = new Waiter(c);
 		if (!w.step(mc)) {
 			WAITERS.add(w);
@@ -63,6 +63,7 @@ public final class WaitActions {
 	/** What to wait for. Parsed from the action params. */
 	record Conditions(Integer ticks, int timeoutMs, int settleTicks,
 					  Predicate<String> chat, String chatText, long sinceId, boolean includeActionBar,
+					  PacketLog.Filter packet, long packetSinceId,
 					  String screen, Boolean inWorld,
 					  Double x, Double y, Double z, double radius) {
 
@@ -70,15 +71,19 @@ public final class WaitActions {
 			return chatText != null;
 		}
 
+		boolean hasPacket() {
+			return packet != null;
+		}
+
 		boolean hasPosition() {
 			return x != null || y != null || z != null;
 		}
 
 		boolean hasCondition() {
-			return hasChat() || screen != null || inWorld != null || hasPosition();
+			return hasChat() || hasPacket() || screen != null || inWorld != null || hasPosition();
 		}
 
-		static Conditions parse(JsonObject params, long latestChatId) {
+		static Conditions parse(JsonObject params, long latestChatId, long latestPacketId) {
 			Integer ticks = optInt(params, "ticks");
 			if (ticks != null && (ticks < 0 || ticks > MAX_TICKS)) {
 				throw new IllegalArgumentException("ticks must be 0-" + MAX_TICKS);
@@ -100,6 +105,17 @@ public final class WaitActions {
 			Long since = params.has("since_id") && !params.get("since_id").isJsonNull()
 					? params.get("since_id").getAsLong() : null;
 
+			String packetText = optString(params, "packet");
+			PacketLog.Filter packet = null;
+			if (packetText != null) {
+				String dir = optString(params, "packet_direction");
+				packet = new PacketLog.Filter(packetText.isEmpty() ? null
+						: textMatcher("packet", packetText, optBool(params, "packet_regex")),
+						dir == null ? PacketLog.IN : PacketLog.Filter.direction(dir), false);
+			}
+			Long packetSince = params.has("packet_since_id") && !params.get("packet_since_id").isJsonNull()
+					? params.get("packet_since_id").getAsLong() : null;
+
 			String screen = optString(params, "screen");
 			if (screen != null && screen.isBlank()) {
 				throw new IllegalArgumentException("screen must be a screen name, such as InventoryScreen, or none.");
@@ -114,11 +130,12 @@ public final class WaitActions {
 
 			Conditions c = new Conditions(ticks, timeoutMs, settle == null ? 0 : settle,
 					chat, chatText, since == null ? latestChatId : since, optBool(params, "include_action_bar"),
+					packet, packetSince == null ? latestPacketId : packetSince,
 					screen == null ? null : screen.trim(), inWorld,
 					optDouble(params, "x"), optDouble(params, "y"), optDouble(params, "z"),
 					radius == null ? DEFAULT_RADIUS : radius);
 			if (!c.hasCondition() && ticks == null) {
-				throw new IllegalArgumentException("Give ticks, or a condition: chat, screen, in_world, or x/y/z.");
+				throw new IllegalArgumentException("Give ticks, or a condition: chat, packet, screen, in_world, or x/y/z.");
 			}
 			return c;
 		}
@@ -126,6 +143,15 @@ public final class WaitActions {
 
 	/** Text in a chat line, case-insensitive. An empty text matches every line. With regex, a regex find. */
 	static Predicate<String> chatMatcher(String text, boolean regex) {
+		return textMatcher("chat", text, regex);
+	}
+
+	/**
+	 * Text in a value, case-insensitive. An empty text matches every value. With regex, a regex find.
+	 *
+	 * @param param the name of the param, for the error message
+	 */
+	static Predicate<String> textMatcher(String param, String text, boolean regex) {
 		if (text.isEmpty()) {
 			return line -> true;
 		}
@@ -134,7 +160,7 @@ public final class WaitActions {
 				Pattern p = Pattern.compile(text);
 				return line -> p.matcher(line).find();
 			} catch (PatternSyntaxException e) {
-				throw new IllegalArgumentException("chat is not a valid regex: " + e.getDescription());
+				throw new IllegalArgumentException(param + " is not a valid regex: " + e.getDescription());
 			}
 		}
 		String lower = text.toLowerCase(Locale.ROOT);
@@ -167,6 +193,7 @@ public final class WaitActions {
 		/** The tick on which the conditions were all true, or -1. */
 		int matchedAt = -1;
 		JsonObject chatMatch;
+		JsonObject packetMatch;
 
 		Waiter(Conditions c) {
 			this.c = c;
@@ -208,6 +235,14 @@ public final class WaitActions {
 					return false;
 				}
 			}
+			if (c.hasPacket()) {
+				if (packetMatch == null) {
+					packetMatch = PacketLog.find(c.packetSinceId(), c.packet());
+				}
+				if (packetMatch == null) {
+					return false;
+				}
+			}
 			if (c.screen() != null && !screenMatches(c.screen(), screenName(mc))) {
 				return false;
 			}
@@ -233,6 +268,12 @@ public final class WaitActions {
 				o.add("chatMatch", chatMatch);
 			}
 			o.addProperty("latestChatId", ChatLog.latestId());
+			if (packetMatch != null) {
+				o.add("packetMatch", packetMatch);
+			}
+			if (c.hasPacket()) {
+				o.addProperty("latestPacketId", PacketLog.latestId());
+			}
 			o.addProperty("screen", screenName(mc));
 			LocalPlayer p = mc.player;
 			o.addProperty("inWorld", inWorld(mc));

@@ -150,7 +150,7 @@ class GravelMcpServerTest {
 		assertEquals(List.of("launch_minecraft", "stop_minecraft", "minecraft_status", "join_world",
 				"join_server", "read_disconnects", "chat", "wait_for", "inventory", "screen", "options", "chunk_info",
 				"teleport", "scan_blocks", "list_entities", "list_players", "debug_screen", "read_hud",
-				"lookup_registry", "screenshot", "press_key",
+				"packets", "lookup_registry", "screenshot", "press_key",
 				"screen_input", "look", "move", "jump", "attack", "use", "reload_resources", "reload_chunks", "path_to",
 				"path_status", "path_cancel", "mine", "follow", "attack_entity", "baritone_command", "baritone_settings",
 				"minecraft_launch_log", "list_minecraft_logs", "scan_minecraft_log"), names);
@@ -763,6 +763,41 @@ class GravelMcpServerTest {
 			assertEquals("read_hud", fake.calls.get(0).action());
 			assertEquals(0, fake.calls.get(0).params().size());
 			assertFalse(JsonParser.parseString(toolText(reply)).getAsJsonObject().get("hudHidden").getAsBoolean());
+		}
+	}
+
+	@Test
+	void packetsReadPassesFiltersAndClearCallsItsAction() throws Exception {
+		try (FakeBridge fake = new FakeBridge()) {
+			fake.on("read_packets", params -> {
+				JsonObject o = new JsonObject();
+				o.addProperty("latestId", 42);
+				return FakeBridge.Reply.ok(o);
+			});
+			fake.on("clear_packets", params -> FakeBridge.Reply.ok(new JsonObject()));
+			JsonObject args = new JsonObject();
+			args.addProperty("channel", "mymod:");
+			args.addProperty("direction", "in");
+			args.addProperty("unknown", 1);
+			server(fake.port()).handle(toolCall(1, "packets", args));
+			JsonObject reply = sink.next();
+			assertFalse(toolIsError(reply), toolText(reply));
+			assertEquals("read_packets", fake.calls.get(0).action());
+			JsonObject sent = fake.calls.get(0).params();
+			assertEquals(2, sent.size());
+			assertEquals("mymod:", sent.get("channel").getAsString());
+			assertEquals(42, JsonParser.parseString(toolText(reply)).getAsJsonObject().get("latestId").getAsInt());
+
+			JsonObject clear = new JsonObject();
+			clear.addProperty("action", "clear");
+			server(fake.port()).handle(toolCall(2, "packets", clear));
+			assertFalse(toolIsError(sink.next()));
+			assertEquals("clear_packets", fake.calls.get(1).action());
+
+			JsonObject bad = new JsonObject();
+			bad.addProperty("action", "nope");
+			server(fake.port()).handle(toolCall(3, "packets", bad));
+			assertTrue(toolIsError(sink.next()));
 		}
 	}
 

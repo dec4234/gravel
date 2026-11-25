@@ -231,10 +231,10 @@ public final class GravelMcpServer {
 
 		add(new Tool("wait_for",
 				"Wait for a number of client ticks (20 ticks = 1 s), or until conditions are true: a chat line "
-						+ "matches, a screen is open, the player is in a world or not, the player is near a position. "
+						+ "matches, a packet on a channel arrives, a screen is open, the player is in a world or not, the player is near a position. "
 						+ "With more than one condition, all must be true. With ticks and conditions, it stops at "
 						+ "the first of the two. Returns matched, stoppedBy (condition, ticks or timeout), the "
-						+ "matching chat line, the screen and the position.",
+						+ "matching chat line or packet, the screen and the position.",
 				Schema.object()
 						.prop("ticks", "integer", "Stop after this many client ticks, 0-500. Alone, it is a plain wait.")
 						.prop("timeout_ms", "integer", "Longest wait, 0-" + MAX_WAIT_MS + " ms. Default 10000 ("
@@ -245,6 +245,15 @@ public final class GravelMcpServer {
 						.prop("since_id", "integer", "Only look at chat lines after this id (for example latestId "
 								+ "from chat read). Default: lines that arrive after the call starts.")
 						.prop("include_action_bar", "boolean", "Also look at action bar text. Default false.")
+						.prop("packet", "string", "Wait for a packet whose channel contains this text "
+								+ "(case-insensitive), such as \"mymod:sync\" or \"mymod:\". The channel of a custom "
+								+ "payload is its payload id; of a vanilla packet, its type id (minecraft:set_time). "
+								+ "\"\" matches any packet.")
+						.prop("packet_regex", "boolean", "packet is a regex (Java syntax, find). Default false.")
+						.prop("packet_direction", "string", "in (received from the server, default), out (sent by "
+								+ "the client) or any.")
+						.prop("packet_since_id", "integer", "Only look at packets after this id (for example "
+								+ "latestId from packets). Default: packets that arrive after the call starts.")
 						.prop("screen", "string", "Wait until this screen is open, by class name such as "
 								+ "InventoryScreen or PauseScreen (the \"Screen\" end is optional), or none for no screen.")
 						.prop("in_world", "boolean", "Wait until the player is in a world and it is not loading (true), or not in a world (false).")
@@ -256,7 +265,8 @@ public final class GravelMcpServer {
 								+ "(0-40), for example to get more chat lines. Default 0.")
 						.build(),
 				args -> PRETTY.toJson(bridge.action("wait_for", copy(args, "ticks", "timeout_ms", "chat", "chat_regex",
-						"since_id", "include_action_bar", "screen", "in_world", "x", "y", "z", "radius", "settle_ticks")))));
+						"since_id", "include_action_bar", "packet", "packet_regex", "packet_direction", "packet_since_id",
+						"screen", "in_world", "x", "y", "z", "radius", "settle_ticks")))));
 
 		add(new Tool("inventory",
 				"Items and slots. Actions: read (default; the items in the open container screen, such as the "
@@ -494,6 +504,38 @@ public final class GravelMcpServer {
 						+ "show now.",
 				Schema.object().build(),
 				args -> PRETTY.toJson(bridge.action("read_hud", new JsonObject()))));
+
+		add(new Tool("packets",
+				"The network packet log of the client connection, to debug mods with custom payloads. Actions: read "
+						+ "(default; the packets by channel, received (in) and sent (out), with count and sizes in "
+						+ "bytes (total, avg, min, max, last), and the newest packets; custom payload channels come "
+						+ "first, then the most packets), clear (remove the log and the totals). Without since_id the "
+						+ "counts are totals since the game started or the last clear. With since_id only the kept "
+						+ "packets after that id count (the log keeps the newest 4096; complete false means some were "
+						+ "dropped). Sizes are the packet bytes after decompression, with the packet id. "
+						+ "Works in singleplayer and on servers. Use wait_for with packet to "
+						+ "wait for a packet.",
+				Schema.object()
+						.prop("action", "string", "read (default) or clear.")
+						.prop("channel", "string", "For read: only channels that contain this text (case-insensitive), "
+								+ "such as \"mymod:\". Optional.")
+						.prop("channel_regex", "boolean", "For read: channel is a regex (Java syntax, find). Default false.")
+						.prop("direction", "string", "For read: in, out or any (default).")
+						.prop("custom_only", "boolean", "For read: only custom payload channels. Default false.")
+						.prop("since_id", "integer", "For read: only packets with an id greater than this (latestId "
+								+ "from an earlier call). Default 0 (the totals).")
+						.prop("limit", "integer", "For read: most channels to list. Default 50.")
+						.prop("recent", "integer", "For read: how many of the newest packets to list. Default 20.")
+						.build(),
+				args -> {
+					String action = action(args, "read");
+					return switch (action) {
+						case "read" -> PRETTY.toJson(bridge.action("read_packets", copy(args, "channel", "channel_regex",
+								"direction", "custom_only", "since_id", "limit", "recent")));
+						case "clear" -> PRETTY.toJson(bridge.action("clear_packets", new JsonObject()));
+						default -> throw unknownAction(action, "read or clear");
+					};
+				}));
 
 		add(new Tool("lookup_registry",
 				"Find the ids in a game registry that match a filter, so /give, /summon, /effect, /enchant and "
