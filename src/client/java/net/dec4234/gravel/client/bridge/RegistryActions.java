@@ -24,7 +24,8 @@ import java.util.Optional;
 
 /**
  * Registry lookup: finds the ids in a game registry (items, blocks, entity types, biomes, enchantments and all
- * others) that match a filter, so commands like /give and /summon can use correct ids.
+ * others) that match a filter, so commands like /give and /summon can use correct ids. Also finds data-pack
+ * entries (recipes, loot tables, advancements) and audits the assets and data of a mod namespace.
  */
 public final class RegistryActions {
 	static final int DEFAULT_LIMIT = 100;
@@ -43,6 +44,7 @@ public final class RegistryActions {
 		ALIASES.put("sound", "sound_event");
 		ALIASES.put("particle", "particle_type");
 		ALIASES.put("dimension", "dimension_type");
+		ALIASES.put("loot", "loot_table");
 	}
 
 	private RegistryActions() {
@@ -94,12 +96,22 @@ public final class RegistryActions {
 		int limit = BlockGroups.clamp(intParam(params, "limit", DEFAULT_LIMIT), 1, MAX_LIMIT);
 		boolean includeTags = boolParam(params, "include_tags", false);
 
+		if (boolParam(params, "audit", false)) {
+			return RegistryAudit.audit(mc, stringParam(params, "namespace"), registryName, filter, limit);
+		}
+
 		Map<Identifier, Registry<?>> all = registries(mc);
 		if (registryName == null || registryName.isBlank()) {
 			return listRegistries(mc, all, filter);
 		}
 
 		Identifier id = registryId(registryName);
+		if (DataPackRegistries.isDataPackRegistry(id)) {
+			if (tag != null && !tag.isBlank()) {
+				throw new IllegalArgumentException("tag does not work with the " + id.getPath() + " registry.");
+			}
+			return lookupDataPack(mc, id, filter, limit);
+		}
 		Registry<?> registry = id == null ? null : all.get(id);
 		if (registry == null) {
 			String hint = mc.level == null ? " Some registries (biomes, enchantments) need a world. Join a world first." : "";
@@ -131,6 +143,18 @@ public final class RegistryActions {
 				JsonObject o = new JsonObject();
 				o.addProperty("registry", id.getNamespace().equals("minecraft") ? id.getPath() : id.toString());
 				o.addProperty("size", all.get(id).size());
+				list.add(o);
+			}
+		}
+		Map<Identifier, Integer> dataSizes = DataPackRegistries.sizes(mc);
+		for (Identifier id : DataPackRegistries.KINDS.keySet()) {
+			if (!all.containsKey(id) && BlockGroups.matches(id.toString(), filter)) {
+				JsonObject o = new JsonObject();
+				o.addProperty("registry", id.getPath());
+				if (dataSizes.containsKey(id)) {
+					o.addProperty("size", dataSizes.get(id));
+				}
+				o.addProperty("dataPack", true);
 				list.add(o);
 			}
 		}
@@ -197,6 +221,45 @@ public final class RegistryActions {
 			o.addProperty("tag", tag);
 		}
 		o.addProperty("registrySize", registry.size());
+		o.addProperty("matched", matches.size());
+		o.addProperty("returned", entries.size());
+		o.addProperty("truncated", matches.size() > entries.size());
+		o.add("entries", entries);
+		return o;
+	}
+
+	/** Lookup in a data-pack registry (recipe, loot_table, advancement, item_modifier, predicate). */
+	private static JsonObject lookupDataPack(Minecraft mc, Identifier registry, String filter, int limit) {
+		DataPackRegistries.Result result = DataPackRegistries.entries(mc, registry);
+		List<DataPackRegistries.Entry> matches = new ArrayList<>();
+		for (DataPackRegistries.Entry e : result.entries()) {
+			if (BlockGroups.matches(e.id(), filter) || (e.name() != null && BlockGroups.matches(e.name(), filter))) {
+				matches.add(e);
+			}
+		}
+		matches.sort(Comparator.<DataPackRegistries.Entry>comparingInt(e -> rank(e.id(), filter))
+				.thenComparing(DataPackRegistries.Entry::id));
+
+		JsonArray entries = new JsonArray();
+		for (DataPackRegistries.Entry m : matches.subList(0, Math.min(limit, matches.size()))) {
+			JsonObject e = new JsonObject();
+			e.addProperty("id", m.id());
+			if (m.name() != null) {
+				e.addProperty("name", m.name());
+			}
+			if (m.type() != null) {
+				e.addProperty("type", m.type());
+			}
+			entries.add(e);
+		}
+
+		JsonObject o = new JsonObject();
+		o.addProperty("registry", registry.toString());
+		o.addProperty("source", result.source());
+		if (!result.complete()) {
+			o.addProperty("note", "Only the entries the server sent to this client. Use a singleplayer world for all.");
+		}
+		o.addProperty("registrySize", result.entries().size());
 		o.addProperty("matched", matches.size());
 		o.addProperty("returned", entries.size());
 		o.addProperty("truncated", matches.size() > entries.size());

@@ -713,6 +713,24 @@ class GravelMcpServerTest {
 	}
 
 	@Test
+	void lookupRegistryPassesAuditArguments() throws Exception {
+		try (FakeBridge fake = new FakeBridge()) {
+			fake.on("lookup_registry", params -> FakeBridge.Reply.ok(new JsonObject()));
+			JsonObject args = new JsonObject();
+			args.addProperty("audit", true);
+			args.addProperty("namespace", "mymod");
+			server(fake.port()).handle(toolCall(1, "lookup_registry", args));
+			JsonObject reply = sink.next();
+			assertFalse(toolIsError(reply), toolText(reply));
+
+			JsonObject sent = fake.calls.get(0).params();
+			assertTrue(sent.get("audit").getAsBoolean());
+			assertEquals("mymod", sent.get("namespace").getAsString());
+			assertFalse(sent.has("registry"));
+		}
+	}
+
+	@Test
 	void lookupRegistryPassesOnlyGivenArguments() throws Exception {
 		try (FakeBridge fake = new FakeBridge()) {
 			fake.on("lookup_registry", params -> {

@@ -342,6 +342,32 @@ public class BridgeClientGameTest implements FabricClientGameTest {
 
 		JsonObject list = action(context, "lookup_registry", new JsonObject());
 		check(list.getAsJsonArray("registries").size() > 50, "registry list has many registries");
+
+		JsonObject recipes = new JsonObject();
+		recipes.addProperty("registry", "recipe");
+		recipes.addProperty("filter", "diamond_block");
+		JsonObject recipe = action(context, "lookup_registry", recipes);
+		checkEquals("minecraft:diamond_block", string(recipe.getAsJsonArray("entries").get(0).getAsJsonObject(), "id"),
+				"recipe registry from the integrated server: " + recipe);
+
+		JsonObject loot = new JsonObject();
+		loot.addProperty("registry", "loot_table");
+		loot.addProperty("filter", "blocks/diamond_block");
+		check(action(context, "lookup_registry", loot).get("matched").getAsInt() > 0, "diamond block loot table");
+
+		JsonObject advancements = new JsonObject();
+		advancements.addProperty("registry", "advancement");
+		advancements.addProperty("filter", "story/root");
+		check(action(context, "lookup_registry", advancements).get("matched").getAsInt() > 0, "story root advancement");
+
+		JsonObject audit = new JsonObject();
+		audit.addProperty("audit", true);
+		audit.addProperty("namespace", "minecraft");
+		audit.addProperty("filter", "diamond_block");
+		JsonObject audited = action(context, "lookup_registry", audit);
+		check(audited.get("serverData").getAsBoolean(), "audit has server data in singleplayer");
+		check(audited.getAsJsonObject("checked").get("block").getAsInt() == 1, "audit checked the diamond block: " + audited);
+		checkEquals(0, audited.get("withProblems").getAsInt(), "vanilla diamond block has nothing missing: " + audited);
 	}
 
 	private void seeSurroundings(ClientGameTestContext context) {

@@ -565,10 +565,16 @@ public final class GravelMcpServer {
 						+ "enchantment, effect, potion, sound, particle, structure and all others (call with no "
 						+ "registry to list them with their sizes). Biomes, enchantments and other data-driven "
 						+ "registries need a world. Each entry has its id and, for items, blocks and entities, the "
-						+ "name the player sees. Exact matches come first.",
+						+ "name the player sees. Exact matches come first. Data-pack registries recipe, loot_table, "
+						+ "advancement, item_modifier and predicate are server data: all of them in singleplayer, "
+						+ "only the sent advancements on a multiplayer server. With audit true and a namespace, it "
+						+ "checks each item, block and entity of that mod and lists what is missing: translation "
+						+ "(raw key shows), item or block model, texture (missing texture), loot table and recipe "
+						+ "(the last two only in singleplayer).",
 				Schema.object()
 						.prop("registry", "string", "The registry: item, block, entity, biome, enchantment, effect, "
-								+ "potion, sound, particle, structure, or any registry id like worldgen/biome. Omit to "
+								+ "potion, sound, particle, structure, recipe, loot_table, advancement, or any registry id like "
+								+ "worldgen/biome. Omit to "
 								+ "list the registries.")
 						.prop("filter", "string", "Only ids or names that contain one of these comma-separated terms, "
 								+ "for example \"diamond\" or \"zombie,skeleton\". Not case sensitive. Optional.")
@@ -576,9 +582,13 @@ public final class GravelMcpServer {
 								+ "\"#c:ores\". Optional.")
 						.prop("include_tags", "boolean", "Add the tags of each entry. Default false.")
 						.prop("limit", "integer", "Most entries to return, 1-2000. Default 100.")
+						.prop("audit", "boolean", "Audit the assets and data of a mod namespace instead of a lookup. "
+								+ "Needs namespace. registry can limit it to item, block or entity. Returns only "
+								+ "entries with something missing. Default false.")
+						.prop("namespace", "string", "For audit: the mod namespace, for example \"mymod\".")
 						.build(),
 				args -> PRETTY.toJson(bridge.action("lookup_registry",
-						copy(args, "registry", "filter", "tag", "include_tags", "limit")))));
+						copy(args, "registry", "filter", "tag", "include_tags", "limit", "audit", "namespace")))));
 
 		add(Tool.withContent("screenshot",
 				"Take a screenshot of the game view: the world, the HUD and any open screen or menu, as the player "
