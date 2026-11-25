@@ -12,6 +12,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.function.Supplier;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.regex.PatternSyntaxException;
@@ -31,20 +32,25 @@ final class LogScanner {
 			"^\\s*(?:Caused by: |Suppressed: )?((?:[\\w$]+\\.)+[\\w$]*(?:Exception|Error|Throwable))\\b");
 	private static final List<String> LEVELS = List.of("TRACE", "DEBUG", "INFO", "WARN", "ERROR", "FATAL");
 
-	private final Path runDir;
+	/** The game folder. It can change: launch_minecraft can run the game in a different project. */
+	private final Supplier<Path> runDir;
 	private final Path launchLog;
 
 	LogScanner(Path runDir, Path launchLog) {
+		this(() -> runDir, launchLog);
+	}
+
+	LogScanner(Supplier<Path> runDir, Path launchLog) {
 		this.runDir = runDir;
 		this.launchLog = launchLog;
 	}
 
 	Path logsDir() {
-		return runDir.resolve("logs");
+		return runDir.get().resolve("logs");
 	}
 
 	Path crashDir() {
-		return runDir.resolve("crash-reports");
+		return runDir.get().resolve("crash-reports");
 	}
 
 	/** One log event: a header line and the lines after it that have no header (stack traces, lists). */

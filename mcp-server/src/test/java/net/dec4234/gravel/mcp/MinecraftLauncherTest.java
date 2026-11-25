@@ -7,6 +7,7 @@ import org.junit.jupiter.api.io.TempDir;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -75,5 +76,82 @@ class MinecraftLauncherTest {
 			launcher.stopIfLaunched();
 			assertTrue(fake.calls.isEmpty());
 		}
+	}
+
+	/** A Gradle wrapper that prints the lines and exits with the code. */
+	private static Path fakeProject(Path dir, int exitCode, String... lines) throws Exception {
+		Files.createDirectories(dir);
+		StringBuilder bat = new StringBuilder("@echo off\r\n");
+		StringBuilder sh = new StringBuilder("#!/bin/sh\n");
+		for (String line : lines) {
+			bat.append("echo ").append(line).append("\r\n");
+			sh.append("echo '").append(line).append("'\n");
+		}
+		bat.append("exit /b ").append(exitCode).append("\r\n");
+		sh.append("exit ").append(exitCode).append("\n");
+		Files.writeString(dir.resolve("gradlew.bat"), bat);
+		Path unix = dir.resolve("gradlew");
+		Files.writeString(unix, sh);
+		unix.toFile().setExecutable(true);
+		return dir;
+	}
+
+	@Test
+	void groovyListEscapesQuotesAndBackslashes() {
+		assertEquals("'a', 'C:\\\\x\\'s'", MinecraftLauncher.groovyList(List.of("a", "C:\\x's")));
+	}
+
+	@Test
+	void buildTasksOnlyRootInGravel() throws Exception {
+		MinecraftLauncher launcher = new MinecraftLauncher(project, new BridgeClient(FakeBridge.unusedPort()));
+		assertEquals(List.of(":assemble"), launcher.buildTasks(project));
+		assertEquals(List.of("assemble"), launcher.buildTasks(project.resolve("other")));
+	}
+
+	@Test
+	void findGravelJarSkipsSourcesJar() throws Exception {
+		MinecraftLauncher launcher = new MinecraftLauncher(project, new BridgeClient(FakeBridge.unusedPort()));
+		assertNull(launcher.findGravelJar());
+		Path libs = Files.createDirectories(project.resolve("build/libs"));
+		Files.writeString(libs.resolve("gravel-1.0.0-sources.jar"), "");
+		Files.writeString(libs.resolve("gravel-1.0.0.jar"), "");
+		assertEquals(libs.resolve("gravel-1.0.0.jar"), launcher.findGravelJar());
+	}
+
+	@Test
+	void launchRejectsFolderWithoutGradleWrapper() throws Exception {
+		MinecraftLauncher launcher = new MinecraftLauncher(project, new BridgeClient(FakeBridge.unusedPort()));
+		Path empty = Files.createDirectories(project.resolve("empty"));
+		var options = new MinecraftLauncher.Options(null, false, empty, false);
+		assertThrows(IllegalArgumentException.class, () -> launcher.launch(options, Duration.ofSeconds(5)));
+	}
+
+	@Test
+	void rebuildStopsWhenBuildFails() throws Exception {
+		Path mod = fakeProject(project.resolve("mod"), 1, "Foo.java:3: error: cannot find symbol", "BUILD FAILED");
+		MinecraftLauncher launcher = new MinecraftLauncher(project, new BridgeClient(FakeBridge.unusedPort()));
+		String msg = launcher.launch(new MinecraftLauncher.Options(null, false, mod, true), Duration.ofSeconds(60));
+		assertTrue(msg.contains("build failed"), msg);
+		assertTrue(msg.contains("Foo.java:3: error: cannot find symbol"), msg);
+		assertFalse(launcher.isProcessAlive());
+	}
+
+	@Test
+	void otherProjectGetsGravelThroughInitScript() throws Exception {
+		Files.createDirectories(project.resolve("build/libs"));
+		Path jar = project.resolve("build/libs/gravel-1.0.0.jar");
+		Files.writeString(jar, "");
+		Path mod = fakeProject(project.resolve("mod"), 0, "started");
+		MinecraftLauncher launcher = new MinecraftLauncher(project, new BridgeClient(FakeBridge.unusedPort()));
+
+		String msg = launcher.launch(new MinecraftLauncher.Options("My World", false, mod, false), Duration.ofSeconds(60));
+
+		assertTrue(msg.contains("exited (code 0)"), msg);
+		assertEquals(mod, launcher.projectDir());
+		assertEquals(mod.resolve("run"), launcher.runDir());
+		String script = Files.readString(launcher.logFile().getParent().resolve("gravel-init.gradle"));
+		assertTrue(script.contains("-Dfabric.addMods=" + jar.toString().replace("\\", "\\\\")), script);
+		assertTrue(script.contains("-Dgravel.music=false"), script);
+		assertTrue(script.contains("'--quickPlaySingleplayer', 'My World'"), script);
 	}
 }

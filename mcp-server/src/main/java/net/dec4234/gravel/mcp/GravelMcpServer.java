@@ -74,7 +74,7 @@ public final class GravelMcpServer {
 		this.projectDir = projectDir;
 		this.bridge = new BridgeClient(port);
 		this.launcher = new MinecraftLauncher(projectDir, bridge);
-		this.logs = new LogScanner(projectDir.resolve("run"), launcher.logFile());
+		this.logs = new LogScanner(launcher::runDir, launcher.logFile());
 		registerTools();
 	}
 
@@ -85,17 +85,33 @@ public final class GravelMcpServer {
 				"Start the Minecraft dev client (gradlew runClient) with the Gravel mod loaded, and wait until the mod "
 						+ "bridge is ready. The first launch can take several minutes. Optionally open a singleplayer "
 						+ "world by its folder name right after startup. Music is off unless music is true. The game "
-						+ "closes when the MCP session ends.",
+						+ "closes when the MCP session ends. To test a different mod, set project_dir to that mod's "
+						+ "Gradle project: runClient then runs there, and Gravel is added with -Dfabric.addMods, so the "
+						+ "mod project needs no changes (it must have Fabric API on its runtime classpath). After a code "
+						+ "change, call again with rebuild=true: this stops the game, builds the project, starts the "
+						+ "game again and joins the last world or server again.",
 				Schema.object()
-						.prop("world", "string", "Name of an existing singleplayer world (save folder) to open on start. Optional.")
+						.prop("world", "string", "Name of an existing singleplayer world (save folder) to open on start. "
+								+ "With rebuild, the default is the last world or server. Optional.")
 						.prop("music", "boolean", "Let the game play music. Default false.")
-						.prop("timeout_seconds", "integer", "How long to wait for the game to be ready. Default 600.")
+						.prop("project_dir", "string", "Folder of the Gradle project whose runClient to use, for example "
+								+ "the mod under test. Default: the project of the last launch, else the Gravel project. "
+								+ "Logs and saves are then in <project_dir>/run.")
+						.prop("rebuild", "boolean", "Stop the game, build the project (gradlew assemble), start it again "
+								+ "and join the last world or server again. If the build fails, the compile errors are "
+								+ "returned and the game is not started. Default false.")
+						.prop("timeout_seconds", "integer", "How long to wait for the build and for the game to be ready. "
+								+ "Default 600.")
 						.build(),
 				args -> {
-					String world = Schema.optString(args, "world");
-					int timeout = Schema.optInt(args, "timeout_seconds", 600);
-					boolean music = args != null && args.has("music") && args.get("music").getAsBoolean();
-					return launcher.launch(world, music, Duration.ofSeconds(timeout));
+					String dir = Schema.optString(args, "project_dir");
+					Path project = dir == null || dir.isBlank() ? null : projectDir.resolve(dir.trim());
+					MinecraftLauncher.Options options = new MinecraftLauncher.Options(
+							Schema.optString(args, "world"),
+							Schema.optBool(args, "music", false),
+							project,
+							Schema.optBool(args, "rebuild", false));
+					return launcher.launch(options, Duration.ofSeconds(Schema.optInt(args, "timeout_seconds", 600)));
 				}));
 
 		add(new Tool("stop_minecraft",
@@ -177,6 +193,7 @@ public final class GravelMcpServer {
 					JsonObject started = bridge.action("join_world", params);
 					String warning = started.has("warning") ? "\nWarning: " + started.get("warning").getAsString() : "";
 					String joined;
+					launcher.rememberWorld(name);
 					if (started.has("alreadyInWorld")) {
 						joined = "Already in world '" + name + "'.";
 					} else {
@@ -216,6 +233,7 @@ public final class GravelMcpServer {
 						params.addProperty("resource_pack", pack);
 					}
 					JsonObject started = bridge.action("join_server", params);
+					launcher.rememberServer(address);
 					if (started.has("alreadyOnServer")) {
 						return "Already on server '" + address + "'.";
 					}
@@ -1169,7 +1187,7 @@ public final class GravelMcpServer {
 			for (JsonElement e : given) {
 				String path = e.getAsString().trim();
 				if (!path.isEmpty()) {
-					list.add(projectDir.resolve(path).toAbsolutePath().normalize().toString());
+					list.add(launcher.projectDir().resolve(path).toAbsolutePath().normalize().toString());
 				}
 			}
 			if (!list.isEmpty()) {
