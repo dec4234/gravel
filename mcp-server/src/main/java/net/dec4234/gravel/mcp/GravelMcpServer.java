@@ -47,6 +47,7 @@ public final class GravelMcpServer {
 		return t;
 	});
 
+	private final Path projectDir;
 	private final BridgeClient bridge;
 	private final MinecraftLauncher launcher;
 	private final LogScanner logs;
@@ -70,6 +71,7 @@ public final class GravelMcpServer {
 
 	GravelMcpServer(PrintStream out, Path projectDir, int port) {
 		this.out = out;
+		this.projectDir = projectDir;
 		this.bridge = new BridgeClient(port);
 		this.launcher = new MinecraftLauncher(projectDir, bridge);
 		this.logs = new LogScanner(projectDir.resolve("run"), launcher.logFile());
@@ -140,11 +142,27 @@ public final class GravelMcpServer {
 
 		add(new Tool("join_world",
 				"Join a singleplayer world by its save folder name (default \"temp\"). If the world does not exist, "
-						+ "it is created (creative mode, cheats on). Set recreate=true to delete the world and make a "
-						+ "fresh one. Leaves the current world first if needed. Waits until the player is in the world.",
+						+ "it is created (cheats on). Set recreate=true to delete the world and make a fresh one. "
+						+ "Leaves the current world first if needed. Waits until the player is in the world. For the "
+						+ "same start state in each test, use recreate with world_type and seed, and set game_mode, "
+						+ "gamerules and datapacks. world_type, seed and hardcore apply only when the world is "
+						+ "created. game_mode, gamerules and datapacks apply each time, also to an existing world.",
 				Schema.object()
 						.prop("name", "string", "World save folder name. Default \"temp\".")
 						.prop("recreate", "boolean", "Delete the world (if it exists) and create a new one. Default false.")
+						.prop("world_type", "string", "For a new world: normal (default), flat (vanilla superflat) or "
+								+ "void (no blocks, only a small platform at spawn).")
+						.prop("seed", "string", "For a new world: the seed, a number or a text, the same as on the "
+								+ "create world screen. Default: random.")
+						.prop("game_mode", "string", "survival, creative (default for a new world), adventure, "
+								+ "spectator or hardcore (hardcore only for a new world).")
+						.prop("gamerules", "object", "Game rules to set, as name to value, for example "
+								+ "{\"doDaylightCycle\": false, \"randomTickSpeed\": 0}. Old camelCase names and the new "
+								+ "ids (advance_time, minecraft:random_tick_speed) both work. A text such as "
+								+ "\"doDaylightCycle=false,randomTickSpeed=0\" also works.")
+						.arrayProp("datapacks", "string", "Data packs to put in the world and load (like /reload): "
+								+ "folders with a pack.mcmeta, or .zip files. A relative path starts at the project "
+								+ "folder. A pack with the same name in the world is replaced.")
 						.prop("timeout_seconds", "integer", "How long to wait for the world to load. Default 180.")
 						.build(),
 				args -> {
@@ -152,14 +170,25 @@ public final class GravelMcpServer {
 					if (name == null || name.isBlank()) {
 						name = "temp";
 					}
-					JsonObject params = new JsonObject();
+					JsonObject params = copy(args, "world_type", "seed", "game_mode");
 					params.addProperty("name", name);
 					params.addProperty("recreate", Schema.optBool(args, "recreate", false));
+					JsonObject setup = worldSetup(args);
 					JsonObject started = bridge.action("join_world", params);
+					String warning = started.has("warning") ? "\nWarning: " + started.get("warning").getAsString() : "";
+					String joined;
 					if (started.has("alreadyInWorld")) {
-						return "Already in world '" + name + "'.";
+						joined = "Already in world '" + name + "'.";
+					} else {
+						joined = waitForWorld(name, started, Duration.ofSeconds(Schema.optInt(args, "timeout_seconds", 180)));
+						if (joined.startsWith("Timed out")) {
+							return joined + warning;
+						}
 					}
-					return waitForWorld(name, started, Duration.ofSeconds(Schema.optInt(args, "timeout_seconds", 180)));
+					if (setup.isEmpty()) {
+						return joined + warning;
+					}
+					return joined + warning + "\nWorld setup:\n" + PRETTY.toJson(bridge.action("setup_world", setup));
 				}));
 
 		add(new Tool("join_server",
@@ -303,6 +332,11 @@ public final class GravelMcpServer {
 				Schema.object()
 						.prop("action", "string", "read (default), move, click or hotbar.")
 						.prop("include_empty", "boolean", "For read: also list empty slots. Default false.")
+						.prop("include_components", "boolean", "For read: add all data components of each item "
+								+ "(components, as JSON by component id), and the ids that are different from the "
+								+ "item's defaults (changedComponents, removedComponents). Default false.")
+						.prop("include_tooltip", "boolean", "For read: add the tooltip lines as the game shows them, "
+								+ "with the lines that mods add. Default false.")
 						.prop("from", "integer", "For move: slot to take items from.")
 						.prop("to", "integer", "For move: slot to put items in.")
 						.prop("count", "integer", "For move: how many items. Default: the whole stack.")
@@ -320,6 +354,8 @@ public final class GravelMcpServer {
 					return switch (action) {
 						case "read" -> {
 							params.addProperty("include_empty", Schema.optBool(args, "include_empty", false));
+							params.addProperty("include_components", Schema.optBool(args, "include_components", false));
+							params.addProperty("include_tooltip", Schema.optBool(args, "include_tooltip", false));
 							yield PRETTY.toJson(bridge.action("read_inventory", params));
 						}
 						case "move" -> {
@@ -476,9 +512,15 @@ public final class GravelMcpServer {
 						.prop("include_properties", "boolean", "Add block state properties to the id, for example "
 								+ "minecraft:oak_log[axis=y]. Default false.")
 						.prop("max_positions_per_block", "integer", "Most positions to list per block id. Default 64.")
+						.prop("include_block_entity", "boolean", "Also list the block entities (chests, furnaces, "
+								+ "signs, mod machines) in the box that match the filter, nearest first (at most 256), "
+								+ "each with its full NBT as SNBT. In singleplayer the NBT comes from the integrated "
+								+ "server, so it is the real data. On a multiplayer server it is only the part that the "
+								+ "server sends to the client. Default false.")
 						.build(),
 				args -> PRETTY.toJson(bridge.action("scan_blocks", copy(args, "radius", "vertical_radius", "filter",
-						"exposed_only", "include_air", "include_properties", "max_positions_per_block")))));
+						"exposed_only", "include_air", "include_properties", "max_positions_per_block",
+						"include_block_entity")))));
 
 		add(new Tool("list_entities",
 				"List the entities the client knows about near the player (mobs, animals, items, projectiles, "
@@ -491,9 +533,12 @@ public final class GravelMcpServer {
 								+ "for example \"zombie\" or \"cow,sheep,pig\". Optional.")
 						.prop("include_players", "boolean", "Also list other players. Default true.")
 						.prop("limit", "integer", "Most entities to list. Default 100. The counts include all.")
+						.prop("include_nbt", "boolean", "Add the NBT of each listed entity as SNBT (the same data as "
+								+ "/data get entity). In singleplayer it comes from the integrated server. On a "
+								+ "multiplayer server it is the client copy, which has only part of the data. Default false.")
 						.build(),
 				args -> PRETTY.toJson(bridge.action("list_entities",
-						copy(args, "max_distance", "type", "include_players", "limit")))));
+						copy(args, "max_distance", "type", "include_players", "limit", "include_nbt")))));
 
 		add(new Tool("list_players",
 				"Find other players. 'nearby' lists the players the client can see (in render range), nearest first, "
@@ -1097,6 +1142,65 @@ public final class GravelMcpServer {
 	}
 
 	/** Polls the game status until the player is in the named world, the mod reports an error, or time runs out. */
+	/**
+	 * The setup_world parameters from the join_world arguments: game mode, game rules (an object, or a text such
+	 * as "a=1,b=false") and data packs (paths made absolute from the project folder). Empty if none are given.
+	 */
+	JsonObject worldSetup(JsonObject args) {
+		JsonObject setup = copy(args, "game_mode");
+		JsonElement rules = args == null ? null : args.get("gamerules");
+		if (rules != null && !rules.isJsonNull()) {
+			JsonObject parsed = parseGameRules(rules);
+			if (!parsed.isEmpty()) {
+				setup.add("gamerules", parsed);
+			}
+		}
+		JsonElement packs = args == null ? null : args.get("datapacks");
+		if (packs != null && !packs.isJsonNull()) {
+			JsonArray given = new JsonArray();
+			if (packs.isJsonArray()) {
+				given = packs.getAsJsonArray();
+			} else {
+				for (String part : packs.getAsString().split(",")) {
+					given.add(part);
+				}
+			}
+			JsonArray list = new JsonArray();
+			for (JsonElement e : given) {
+				String path = e.getAsString().trim();
+				if (!path.isEmpty()) {
+					list.add(projectDir.resolve(path).toAbsolutePath().normalize().toString());
+				}
+			}
+			if (!list.isEmpty()) {
+				setup.add("datapacks", list);
+			}
+		}
+		return setup;
+	}
+
+	/** Game rules as an object of name to value text. Takes an object, or a text such as "a=1,b=false". */
+	static JsonObject parseGameRules(JsonElement rules) {
+		JsonObject out = new JsonObject();
+		if (rules.isJsonObject()) {
+			for (Map.Entry<String, JsonElement> e : rules.getAsJsonObject().entrySet()) {
+				out.addProperty(e.getKey(), e.getValue().getAsString());
+			}
+			return out;
+		}
+		for (String part : rules.getAsString().split("[,\n]")) {
+			if (part.isBlank()) {
+				continue;
+			}
+			int eq = part.indexOf('=');
+			if (eq <= 0) {
+				throw new IllegalArgumentException("Bad game rule '" + part.trim() + "'. Use name=value.");
+			}
+			out.addProperty(part.substring(0, eq).trim(), part.substring(eq + 1).trim());
+		}
+		return out;
+	}
+
 	private String waitForWorld(String name, JsonObject started, Duration timeout) throws Exception {
 		String action = started.has("action") ? started.get("action").getAsString() : "open";
 		// If we started in a world, first see the player leave it, so the old world is not taken as the new one.

@@ -16,6 +16,7 @@ import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.EntityHitResult;
@@ -35,6 +36,8 @@ import java.util.stream.Collectors;
 public final class SurroundingsActions {
 	static final int MAX_BLOCK_RADIUS = 16;
 	static final int DEFAULT_BLOCK_RADIUS = 4;
+	/** The most block entities that scan_blocks reads NBT for. */
+	static final int MAX_BLOCK_ENTITIES = 256;
 
 	private SurroundingsActions() {
 	}
@@ -58,6 +61,9 @@ public final class SurroundingsActions {
 		boolean properties = boolParam(params, "include_properties", false);
 		int maxPositions = Math.max(0, intParam(params, "max_positions_per_block", 64));
 		String filter = stringParam(params, "filter");
+		boolean blockEntities = boolParam(params, "include_block_entity", false);
+		List<BlockPos> blockEntityPositions = new ArrayList<>();
+		int blockEntityTotal = 0;
 
 		BlockPos center = player.blockPosition();
 		int minY = Math.max(level.getMinY(), center.getY() - vertical);
@@ -84,6 +90,10 @@ public final class SurroundingsActions {
 					String name = blockName(state, properties);
 					if (BlockGroups.matches(name, filter)) {
 						groups.add(name, x, y, z);
+						if (blockEntities && state.hasBlockEntity()) {
+							blockEntityTotal++;
+							blockEntityPositions.add(pos.immutable());
+						}
 					}
 				}
 			}
@@ -101,7 +111,31 @@ public final class SurroundingsActions {
 		o.add("standingOn", blockAt(level, center.below(), true));
 		o.add("lookingAt", lookTarget(mc, player));
 		o.add("blocks", groups.toJson());
+		if (blockEntities) {
+			blockEntityPositions.sort(Comparator.comparingDouble(p -> p.distSqr(center)));
+			List<BlockPos> read = blockEntityPositions.subList(0, Math.min(MAX_BLOCK_ENTITIES, blockEntityPositions.size()));
+			o.add("blockEntities", blockEntitiesJson(mc, level, read));
+			o.addProperty("blockEntityTotal", blockEntityTotal);
+			o.addProperty("blockEntitySource", ServerData.source(mc));
+		}
 		return o;
+	}
+
+	/** The block entities at these positions (nearest first) with their full NBT as SNBT. */
+	private static JsonArray blockEntitiesJson(Minecraft mc, ClientLevel level, List<BlockPos> positions) {
+		Map<BlockPos, String> nbt = ServerData.blockEntityNbt(mc, positions);
+		JsonArray list = new JsonArray();
+		for (BlockPos p : positions) {
+			JsonObject e = blockPosJson(p);
+			e.addProperty("block", blockName(level.getBlockState(p), false));
+			BlockEntity be = level.getBlockEntity(p);
+			if (be != null) {
+				e.addProperty("type", ServerData.blockEntityType(be));
+			}
+			e.addProperty("nbt", nbt.get(p));
+			list.add(e);
+		}
+		return list;
 	}
 
 	/** True if at least one of the 6 neighbors does not fully hide this block (air, glass, water, ...). */
@@ -161,6 +195,7 @@ public final class SurroundingsActions {
 		String filter = stringParam(params, "type");
 		boolean includePlayers = boolParam(params, "include_players", true);
 		int limit = Math.max(0, intParam(params, "limit", 100));
+		boolean includeNbt = boolParam(params, "include_nbt", false);
 
 		List<Entity> found = new ArrayList<>();
 		for (Entity e : mc.level.entitiesForRendering()) {
@@ -187,9 +222,15 @@ public final class SurroundingsActions {
 		JsonObject countsJson = new JsonObject();
 		counts.forEach(countsJson::addProperty);
 
+		List<Entity> shown = found.subList(0, Math.min(limit, found.size()));
+		Map<UUID, String> nbt = includeNbt ? ServerData.entityNbt(mc, shown) : Map.of();
 		JsonArray list = new JsonArray();
-		for (int i = 0; i < Math.min(limit, found.size()); i++) {
-			list.add(entityJson(found.get(i), player));
+		for (Entity e : shown) {
+			JsonObject json = entityJson(e, player);
+			if (includeNbt) {
+				json.addProperty("nbt", nbt.get(e.getUUID()));
+			}
+			list.add(json);
 		}
 
 		JsonObject o = new JsonObject();
@@ -198,6 +239,9 @@ public final class SurroundingsActions {
 		o.addProperty("total", found.size());
 		o.addProperty("returned", list.size());
 		o.add("countsByType", countsJson);
+		if (includeNbt) {
+			o.addProperty("nbtSource", ServerData.source(mc));
+		}
 		o.add("entities", list);
 		return o;
 	}

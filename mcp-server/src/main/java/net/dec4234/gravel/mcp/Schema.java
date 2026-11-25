@@ -24,6 +24,18 @@ final class Schema {
 		return this;
 	}
 
+	/** An array property whose items all have one type. */
+	Schema arrayProp(String name, String itemType, String description) {
+		JsonObject items = new JsonObject();
+		items.addProperty("type", itemType);
+		JsonObject p = new JsonObject();
+		p.addProperty("type", "array");
+		p.add("items", items);
+		p.addProperty("description", description);
+		properties.add(name, p);
+		return this;
+	}
+
 	Schema requiredProp(String name, String type, String description) {
 		prop(name, type, description);
 		required.add(name);

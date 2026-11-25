@@ -17,8 +17,12 @@ import net.minecraft.world.inventory.ContainerInput;
 import net.minecraft.world.inventory.Slot;
 import net.minecraft.world.item.CreativeModeTab;
 import net.minecraft.world.item.CreativeModeTabs;
+import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.TooltipFlag;
+import net.minecraft.network.chat.Component;
 
+import java.util.List;
 import java.util.Locale;
 
 /**
@@ -83,6 +87,8 @@ public final class InventoryActions {
 	private static JsonObject readInventory(Minecraft mc, JsonObject params) {
 		LocalPlayer player = requirePlayer(mc);
 		boolean includeEmpty = params.has("include_empty") && params.get("include_empty").getAsBoolean();
+		boolean components = params.has("include_components") && params.get("include_components").getAsBoolean();
+		boolean tooltip = params.has("include_tooltip") && params.get("include_tooltip").getAsBoolean();
 
 		Screen screen = mc.gui.screen();
 		AbstractContainerMenu menu;
@@ -100,7 +106,7 @@ public final class InventoryActions {
 		o.addProperty("containerOpen", screen instanceof AbstractContainerScreen<?>);
 		o.addProperty("slotCount", menu.slots.size());
 		o.addProperty("selectedHotbarSlot", player.getInventory().getSelectedSlot());
-		o.add("carried", stackJson(menu.getCarried()));
+		o.add("carried", stackJson(mc, menu.getCarried(), components, tooltip));
 		JsonArray slots = new JsonArray();
 		// Use the list position, not Slot.index: the creative inventory's slot copies do not set their index.
 		for (int i = 0; i < menu.slots.size(); i++) {
@@ -109,7 +115,7 @@ public final class InventoryActions {
 			if (stack.isEmpty() && !includeEmpty) {
 				continue;
 			}
-			JsonObject s = stackJson(stack);
+			JsonObject s = stackJson(mc, stack, components, tooltip);
 			s.addProperty("slot", i);
 			s.addProperty("playerInventory", slot.container instanceof Inventory);
 			s.addProperty("containerSlot", slot.getContainerSlot());
@@ -249,6 +255,39 @@ public final class InventoryActions {
 		o.addProperty("count", stack.getCount());
 		o.addProperty("name", stack.getHoverName().getString());
 		return o;
+	}
+
+	/**
+	 * Like {@link #stackJson(ItemStack)}, with more details on request: all data components (with the ids
+	 * that differ from the item's defaults), and the tooltip lines as the game shows them, with the lines
+	 * that mods add.
+	 */
+	static JsonObject stackJson(Minecraft mc, ItemStack stack, boolean components, boolean tooltip) {
+		JsonObject o = stackJson(stack);
+		if (stack.isEmpty()) {
+			return o;
+		}
+		if (components) {
+			o.add("components", ServerData.componentsJson(stack.getComponents(), mc.level.registryAccess()));
+			List<List<String>> patch = ServerData.patchIds(stack.getComponentsPatch());
+			o.add("changedComponents", stringArray(patch.get(0)));
+			o.add("removedComponents", stringArray(patch.get(1)));
+		}
+		if (tooltip) {
+			JsonArray lines = new JsonArray();
+			TooltipFlag flag = mc.options.advancedItemTooltips ? TooltipFlag.ADVANCED : TooltipFlag.NORMAL;
+			for (Component line : stack.getTooltipLines(Item.TooltipContext.of(mc.level), mc.player, flag)) {
+				lines.add(line.getString());
+			}
+			o.add("tooltip", lines);
+		}
+		return o;
+	}
+
+	private static JsonArray stringArray(List<String> values) {
+		JsonArray a = new JsonArray();
+		values.forEach(a::add);
+		return a;
 	}
 
 	private static String describe(ItemStack stack) {

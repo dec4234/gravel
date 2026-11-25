@@ -441,6 +441,92 @@ class GravelMcpServerTest {
 	}
 
 	@Test
+	void joinWorldPassesCreateOptionsAndSetsUpWorld() throws Exception {
+		try (FakeBridge fake = new FakeBridge()) {
+			fake.on("join_world", params -> {
+				JsonObject o = new JsonObject();
+				o.addProperty("alreadyInWorld", true);
+				o.addProperty("warning", "seed not used");
+				return FakeBridge.Reply.ok(o);
+			});
+			fake.on("setup_world", params -> {
+				JsonObject o = new JsonObject();
+				o.addProperty("gameMode", "survival");
+				return FakeBridge.Reply.ok(o);
+			});
+			JsonObject args = new JsonObject();
+			args.addProperty("world_type", "void");
+			args.addProperty("seed", "123");
+			args.addProperty("game_mode", "survival");
+			JsonObject rules = new JsonObject();
+			rules.addProperty("doDaylightCycle", false);
+			rules.addProperty("randomTickSpeed", 0);
+			args.add("gamerules", rules);
+			JsonArray packs = new JsonArray();
+			packs.add("packs/test_pack");
+			args.add("datapacks", packs);
+			server(fake.port()).handle(toolCall(1, "join_world", args));
+
+			String text = toolText(sink.next());
+			assertTrue(text.startsWith("Already in world 'temp'.\nWarning: seed not used\nWorld setup:"), text);
+			JsonObject join = fake.calls.get(0).params();
+			assertEquals("void", join.get("world_type").getAsString());
+			assertEquals("123", join.get("seed").getAsString());
+			assertEquals("survival", join.get("game_mode").getAsString());
+			assertFalse(join.has("gamerules"));
+
+			assertEquals("setup_world", fake.calls.get(1).action());
+			JsonObject setup = fake.calls.get(1).params();
+			assertEquals("survival", setup.get("game_mode").getAsString());
+			assertEquals("false", setup.getAsJsonObject("gamerules").get("doDaylightCycle").getAsString());
+			assertEquals("0", setup.getAsJsonObject("gamerules").get("randomTickSpeed").getAsString());
+			assertEquals(project.resolve("packs/test_pack").toAbsolutePath().normalize().toString(),
+					setup.getAsJsonArray("datapacks").get(0).getAsString());
+		}
+	}
+
+	@Test
+	void joinWorldWithoutSetupOptionsSkipsSetup() throws Exception {
+		try (FakeBridge fake = new FakeBridge()) {
+			fake.on("join_world", params -> {
+				JsonObject o = new JsonObject();
+				o.addProperty("alreadyInWorld", true);
+				return FakeBridge.Reply.ok(o);
+			});
+			server(fake.port()).handle(toolCall(1, "join_world", null));
+			assertEquals("Already in world 'temp'.", toolText(sink.next()));
+			assertEquals(1, fake.calls.size());
+		}
+	}
+
+	@Test
+	void parseGameRulesAcceptsObjectAndText() {
+		JsonObject fromText = GravelMcpServer.parseGameRules(new com.google.gson.JsonPrimitive(
+				"doDaylightCycle=false, randomTickSpeed = 0"));
+		assertEquals("false", fromText.get("doDaylightCycle").getAsString());
+		assertEquals("0", fromText.get("randomTickSpeed").getAsString());
+		assertThrows(IllegalArgumentException.class,
+				() -> GravelMcpServer.parseGameRules(new com.google.gson.JsonPrimitive("keepInventory")));
+	}
+
+	@Test
+	void inventoryReadPassesDetailFlags() throws Exception {
+		try (FakeBridge fake = new FakeBridge()) {
+			fake.on("read_inventory", params -> FakeBridge.Reply.ok(new JsonObject()));
+			JsonObject args = new JsonObject();
+			args.addProperty("include_components", true);
+			args.addProperty("include_tooltip", true);
+			server(fake.port()).handle(toolCall(1, "inventory", args));
+			assertFalse(toolIsError(sink.next()));
+
+			JsonObject sent = fake.calls.getFirst().params();
+			assertTrue(sent.get("include_components").getAsBoolean());
+			assertTrue(sent.get("include_tooltip").getAsBoolean());
+			assertFalse(sent.get("include_empty").getAsBoolean());
+		}
+	}
+
+	@Test
 	void joinWorldReportsWorldError() throws Exception {
 		try (FakeBridge fake = new FakeBridge()) {
 			fake.on("join_world", params -> FakeBridge.Reply.ok(new JsonObject()));
@@ -767,6 +853,7 @@ class GravelMcpServerTest {
 			args.addProperty("radius", 6);
 			args.addProperty("filter", "ore");
 			args.addProperty("exposed_only", true);
+			args.addProperty("include_block_entity", true);
 			args.addProperty("not_a_parameter", 1);
 			server(fake.port()).handle(toolCall(1, "scan_blocks", args));
 			JsonObject reply = sink.next();
@@ -776,6 +863,7 @@ class GravelMcpServerTest {
 			assertEquals(6, sent.get("radius").getAsInt());
 			assertEquals("ore", sent.get("filter").getAsString());
 			assertTrue(sent.get("exposed_only").getAsBoolean());
+			assertTrue(sent.get("include_block_entity").getAsBoolean());
 			assertFalse(sent.has("include_air"));
 			assertFalse(sent.has("not_a_parameter"));
 			assertEquals(3, JsonParser.parseString(toolText(reply)).getAsJsonObject().get("blockCount").getAsInt());
@@ -790,6 +878,7 @@ class GravelMcpServerTest {
 			JsonObject args = new JsonObject();
 			args.addProperty("max_distance", 32.5);
 			args.addProperty("type", "zombie,skeleton");
+			args.addProperty("include_nbt", true);
 			server(fake.port()).handle(toolCall(1, "list_entities", args));
 			assertFalse(toolIsError(sink.next()));
 			server(fake.port()).handle(toolCall(2, "list_players", null));
@@ -798,6 +887,7 @@ class GravelMcpServerTest {
 			assertEquals("list_entities", fake.calls.get(0).action());
 			assertEquals(32.5, fake.calls.get(0).params().get("max_distance").getAsDouble());
 			assertEquals("zombie,skeleton", fake.calls.get(0).params().get("type").getAsString());
+			assertTrue(fake.calls.get(0).params().get("include_nbt").getAsBoolean());
 			assertEquals("list_players", fake.calls.get(1).action());
 			assertEquals(0, fake.calls.get(1).params().size());
 		}

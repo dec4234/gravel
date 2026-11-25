@@ -65,7 +65,7 @@ public final class ReloadActions {
 	}
 
 	/** The same steps as the /reload command: find new packs, keep the selected ones, skip the disabled ones. Runs on the server thread. */
-	private static CompletableFuture<JsonArray> reloadData(IntegratedServer server) {
+	static CompletableFuture<JsonArray> reloadData(IntegratedServer server) {
 		PackRepository repo = server.getPackRepository();
 		List<String> ids = new ArrayList<>(repo.getSelectedIds());
 		repo.reload();
